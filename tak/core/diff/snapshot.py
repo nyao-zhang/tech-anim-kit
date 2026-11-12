@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -31,12 +32,13 @@ class Joint:
 
     @classmethod
     def from_dict(cls, name: str, data: Dict[str, Any]) -> "Joint":
+        data = data or {}
         return cls(name=name, parent=data.get("parent"),
-                   matrix=list(data.get("matrix", _IDENTITY_MATRIX)),
-                   depth=int(data.get("depth", 0)),
-                   scale=list(data.get("scale", [1.0, 1.0, 1.0])),
-                   rotate=list(data.get("rotate", [0.0, 0.0, 0.0])),
-                   namespace=data.get("namespace", ""))
+                   matrix=list(data.get("matrix") or _IDENTITY_MATRIX),
+                   depth=int(data.get("depth") or 0),
+                   scale=list(data.get("scale") or [1.0, 1.0, 1.0]),
+                   rotate=list(data.get("rotate") or [0.0, 0.0, 0.0]),
+                   namespace=data.get("namespace") or "")
 
 
 @dataclass
@@ -59,13 +61,15 @@ class SkeletonSnapshot:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SkeletonSnapshot":
+        data = data or {}
         return cls(
-            dcc=data.get("dcc", "maya"), version=str(data.get("version", "")),
+            dcc=data.get("dcc", "maya"), version=str(data.get("version") or ""),
             unit=data.get("unit", "cm"), up_axis=data.get("up_axis", "Y"),
-            joints={k: Joint.from_dict(k, v) for k, v in data.get("joints", {}).items()},
-            frame_range=list(data.get("frame_range", [1.0, 120.0])),
-            skin=dict(data.get("skin", {})),
-            metadata=dict(data.get("metadata", {})),
+            joints={k: Joint.from_dict(k, v)
+                    for k, v in (data.get("joints") or {}).items()},
+            frame_range=list(data.get("frame_range") or [1.0, 120.0]),
+            skin=dict(data.get("skin") or {}),
+            metadata=dict(data.get("metadata") or {}),
         )
 
 
@@ -125,26 +129,99 @@ def validate_snapshot(snapshot: SkeletonSnapshot, spec: Dict[str, Any]) -> List[
 
 def diff_snapshots(before: SkeletonSnapshot, after: SkeletonSnapshot,
                    matrix_tolerance: float = 0.0001) -> List[Dict[str, Any]]:
-    """对比导出前后（或 DCC 与引擎导入后）的两份快照。"""
+    """对比两份快照；None 按默认空快照处理，返回值仅含严格 JSON 数据。"""
+    before = _coerce_snapshot(before)
+    after = _coerce_snapshot(after)
+    if (isinstance(matrix_tolerance, bool)
+            or not isinstance(matrix_tolerance, (int, float))
+            or not math.isfinite(matrix_tolerance) or matrix_tolerance < 0):
+        raise ValueError("matrix_tolerance 必须是非负有限数值")
+    tolerance = float(matrix_tolerance)
     diffs: List[Dict[str, Any]] = []
     if before.unit != after.unit:
-        diffs.append({"field": "unit", "before": before.unit, "after": after.unit})
+        diffs.append({"field": "unit", "before": _json_value(before.unit),
+                      "after": _json_value(after.unit)})
     if before.up_axis != after.up_axis:
-        diffs.append({"field": "up_axis", "before": before.up_axis, "after": after.up_axis})
+        diffs.append({"field": "up_axis", "before": _json_value(before.up_axis),
+                      "after": _json_value(after.up_axis)})
     if len(before.joints) != len(after.joints):
         diffs.append({"field": "joint_count", "before": len(before.joints),
                       "after": len(after.joints)})
-    for name in sorted(set(before.joints) - set(after.joints)):
+
+    missing = set(before.joints) - set(after.joints)
+    added = set(after.joints) - set(before.joints)
+    renamed = []
+    for old_name in sorted(missing):
+        for new_name in sorted(added):
+            if _joints_equal(before.joints[old_name], after.joints[new_name], tolerance):
+                renamed.append((old_name, new_name))
+                added.remove(new_name)
+                missing.remove(old_name)
+                break
+    for old_name, new_name in renamed:
+        diffs.append({"field": "joint_renamed", "before": old_name, "after": new_name})
+    for name in sorted(missing):
         diffs.append({"field": "joint_missing", "joint": name})
-    for name in sorted(set(after.joints) - set(before.joints)):
+    for name in sorted(added):
         diffs.append({"field": "joint_added", "joint": name})
     for name in sorted(set(before.joints) & set(after.joints)):
         a, b = before.joints[name], after.joints[name]
         if a.parent != b.parent:
-            diffs.append({"field": "parent", "joint": name, "before": a.parent, "after": b.parent})
-        if any(abs(x - y) > matrix_tolerance for x, y in zip(a.matrix, b.matrix)):
+            diffs.append({"field": "parent", "joint": name,
+                          "before": _json_value(a.parent), "after": _json_value(b.parent)})
+        if not _numeric_sequences_equal(a.matrix, b.matrix, tolerance):
             diffs.append({"field": "bind_matrix", "joint": name})
-    if list(before.frame_range) != list(after.frame_range):
-        diffs.append({"field": "frame_range", "before": list(before.frame_range),
-                      "after": list(after.frame_range)})
+    before_range = _json_value(list(before.frame_range or []))
+    after_range = _json_value(list(after.frame_range or []))
+    if before_range != after_range:
+        diffs.append({"field": "frame_range", "before": before_range, "after": after_range})
     return diffs
+
+
+def _coerce_snapshot(snapshot: Any) -> SkeletonSnapshot:
+    if snapshot is None:
+        return SkeletonSnapshot()
+    if isinstance(snapshot, SkeletonSnapshot):
+        return snapshot
+    if isinstance(snapshot, dict):
+        return SkeletonSnapshot.from_dict(snapshot)
+    raise TypeError("snapshot 必须是 SkeletonSnapshot、字典或 None")
+
+
+def _numeric_sequences_equal(before: Any, after: Any, tolerance: float) -> bool:
+    if before is None or after is None:
+        return before is after
+    try:
+        if len(before) != len(after):
+            return False
+    except TypeError:
+        return before == after
+    for left, right in zip(before, after):
+        numbers = (isinstance(left, (int, float)) and not isinstance(left, bool)
+                   and isinstance(right, (int, float)) and not isinstance(right, bool))
+        if numbers:
+            if not math.isclose(left, right, rel_tol=0.0, abs_tol=tolerance):
+                return False
+        elif left != right:
+            return False
+    return True
+
+
+def _joints_equal(before: Joint, after: Joint, tolerance: float) -> bool:
+    return (before.parent == after.parent and before.depth == after.depth
+            and before.namespace == after.namespace
+            and _numeric_sequences_equal(before.matrix, after.matrix, tolerance)
+            and _numeric_sequences_equal(before.scale, after.scale, tolerance)
+            and _numeric_sequences_equal(before.rotate, after.rotate, tolerance))
+
+
+def _json_value(value: Any) -> Any:
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_value(item) for item in value]
+    if value is None or isinstance(value, (str, int, bool)):
+        return value
+    return str(value)
