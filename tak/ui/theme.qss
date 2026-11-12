@@ -1,0 +1,67 @@
+/* TAK dark theme - generated from tokens.json v1.0.0. DO NOT EDIT. */
+QWidget, QMainWindow {
+    background-color: #14161A;
+    color: #E6E8EC;
+    font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    font-size: 13px;
+}
+QWidget[takCard="true"], QGroupBox, QFrame[takCard="true"] {
+    background-color: #1C1F25;
+    border: 1px solid #333842;
+    border-radius: 12px;
+    padding: 12px;
+}
+QLabel { color: #E6E8EC; background: transparent; }
+QLabel[takMuted="true"] { color: #9AA1AC; }
+QLabel[takHint="true"] { color: #6C7480; font-size: 12px; }
+QPushButton {
+    background-color: #242830;
+    color: #E6E8EC;
+    border: 1px solid #454B58;
+    border-radius: 8px;
+    padding: 8px 16px;
+}
+QPushButton:hover { border-color: #4C8DFF; }
+QPushButton:pressed { background-color: #1E3A5F; }
+QPushButton[takPrimary="true"] {
+    background-color: #4C8DFF;
+    color: #FFFFFF;
+    border: 1px solid #4C8DFF;
+}
+QLineEdit, QSpinBox, QComboBox, QPlainTextEdit, QTextEdit {
+    background-color: #242830;
+    color: #E6E8EC;
+    border: 1px solid #333842;
+    border-radius: 4px;
+    padding: 4px 8px;
+    selection-background-color: #1E3A5F;
+}
+QPlainTextEdit { font-family: 'Cascadia Code', Consolas, monospace; }
+QTableWidget, QTreeWidget, QListView {
+    background-color: #1C1F25;
+    alternate-background-color: #20242B;
+    color: #E6E8EC;
+    border: 1px solid #333842;
+    border-radius: 8px;
+    gridline-color: #333842;
+}
+QHeaderView::section {
+    background-color: #242830;
+    color: #9AA1AC;
+    border: none;
+    border-bottom: 1px solid #333842;
+    padding: 8px;
+}
+QLabel[takSeverity="error"], QLabel[takSeverity="blocker"] { color: #E2574C; }
+QLabel[takSeverity="warning"] { color: #E8A33D; }
+QLabel[takSeverity="info"] { color: #5AA9F5; }
+QLabel[takSeverity="success"] { color: #3FBF87; }
+QProgressBar {
+    background-color: #242830;
+    border: 1px solid #333842;
+    border-radius: 4px;
+    text-align: center;
+}
+QProgressBar::chunk { background-color: #4C8DFF; border-radius: 4px; }
+QScrollBar:vertical { background: #14161A; width: 10px; }
+QScrollBar::handle:vertical { background: #454B58; border-radius: 4px; }

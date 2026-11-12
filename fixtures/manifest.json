@@ -1,0 +1,21 @@
+{
+  "version": "1.0.0",
+  "spec": "schema/rig_spec.default.json",
+  "good_count": 20,
+  "bad_count": 20,
+  "violation_types": [
+    "export.frame_range_mismatch",
+    "export.unit_mismatch",
+    "export.up_axis_mismatch",
+    "naming.forbidden_token",
+    "naming.joint_pattern",
+    "naming.namespace",
+    "skeleton.max_depth",
+    "skeleton.missing_required",
+    "skeleton.negative_scale",
+    "skeleton.unfrozen_transform",
+    "skin.max_influences",
+    "skin.unknown_deformer",
+    "skin.weight_sum"
+  ]
+}

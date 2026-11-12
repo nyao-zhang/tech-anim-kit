@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  core-tests:
+    name: core (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip pytest
+      - name: Run test suite
+        run: python -m pytest -q
+      - name: Golden fixtures are reproducible
+        run: python fixtures/generate_fixtures.py --check
+      - name: Design tokens are in sync
+        run: python tak/ui/generate_theme.py --check
+      - name: Core layer has no DCC imports
+        run: |
+          python - <<'PY'
+          import os, re, sys
+          bad = []
+          pattern = re.compile(r"^\s*(from|import)\s+(maya|pymxs|pyfbsdk|unreal)\b", re.M)
+          for root in ("tak/core", "tak/adapters/base.py"):
+              for base, _, files in os.walk(root) if os.path.isdir(root) else [("", "", [root])]:
+                  for name in files:
+                      if not name.endswith(".py"):
+                          continue
+                      path = os.path.join(base, name)
+                      with open(path, encoding="utf-8") as fh:
+                          if pattern.search(fh.read()):
+                              bad.append(path)
+          if bad:
+              print("DCC imports found in core:", bad)
+              sys.exit(1)
+          print("OK: core layer is DCC-free")
+          PY

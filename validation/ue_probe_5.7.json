@@ -1,0 +1,53 @@
+{
+  "ok": true,
+  "python_version": "3.11.8 (tags/v3.11.8:db85d51, Feb  6 2024, 22:03:32) [MSC v.1937 64 bit (AMD64)]",
+  "python_executable": "H:\\UE_5.7\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "repo_root": "C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35",
+  "engine_version": "5.7.2-49658320+++UE5+Release-5.7",
+  "tak_import": {
+    "ok": true,
+    "version": "0.1.0",
+    "spec_version": "1.0.0",
+    "engine_version_via_compat": "5.7.2-49658320+++UE5+Release-5.7",
+    "api_probe_count": 27
+  },
+  "api": {
+    "SystemLibrary": true,
+    "Paths": true,
+    "EditorAssetLibrary": true,
+    "EditorUtilityLibrary": true,
+    "AssetRegistryHelpers": true,
+    "EditorDialog": true,
+    "EditorDialogLibrary": false,
+    "EditorActorSubsystem": true,
+    "EditorLevelLibrary": true,
+    "ToolMenus": true,
+    "ToolMenuEntryScript": true,
+    "Skeleton": true,
+    "SkeletalMesh": true,
+    "AnimSequence": true,
+    "IKRigDefinition": true,
+    "IKRetargeter": true,
+    "MLDeformerAsset": false,
+    "NeuralMorphModel": false,
+    "VertexDeltaModel": false,
+    "MLDeformerComponent": false,
+    "DeformerGraphAsset": false,
+    "MeshDeformerCollection": true,
+    "ControlRig": true,
+    "AnimBlueprint": true,
+    "EditorUtilityWidget": true,
+    "PythonScriptLibrary": true,
+    "InternationalizationLibrary": true
+  },
+  "legacy_python_syntax": {
+    "acc_menu.py": "ok",
+    "acc_unreal_api.py": "ok",
+    "acc_unreal_def.py": "ok",
+    "acc_perf_audit_ue.py": "ok",
+    "init_unreal.py": "ok"
+  },
+  "errors": [],
+  "unreal_module_file": "built-in"
+}

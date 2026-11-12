@@ -1,0 +1,10 @@
+{
+  "id": "__TEMPLATE_ID__",
+  "name": "__TEMPLATE_NAME__",
+  "description": "由 tools/new_tool.py 生成的工具插件骨架",
+  "dcc": ["maya", "max", "mobu", "unreal"],
+  "min_version": { "maya": "2023", "max": "2023", "mobu": "2023", "unreal": "5.8" },
+  "entry": "__TEMPLATE_ID__",
+  "ui": "qt",
+  "permissions": ["scene.read"]
+}

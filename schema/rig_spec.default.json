@@ -1,0 +1,54 @@
+{
+  "version": "1.0.0",
+  "description": "TAK 默认规范：以 Maya Y-up / cm 为源，导出到 UE5.8+ 的标准人形骨架。",
+  "dcc": {
+    "targets": ["maya", "max", "mobu", "unreal"],
+    "min_versions": {
+      "maya": "2023",
+      "max": "2023",
+      "mobu": "2023",
+      "unreal": "5.8"
+    }
+  },
+  "naming": {
+    "joint_pattern": "^(root|pelvis|spine_[0-9]{2}|neck|head|clavicle_[LR]|upperarm_[LR]|lowerarm_[LR]|hand_[LR]|thigh_[LR]|calf_[LR]|foot_[LR]|toe_[LR]|FACIAL_[A-Za-z0-9_]+)$",
+    "side_tokens": ["_L", "_R"],
+    "control_namespace": "CTRL",
+    "forbidden_tokens": [" ", ".", "|", ":", "copy", "Copy"],
+    "case_sensitive": true
+  },
+  "skeleton": {
+    "required_joints": ["root", "pelvis", "spine_01", "neck", "head", "clavicle_L", "clavicle_R", "upperarm_L", "upperarm_R", "lowerarm_L", "lowerarm_R", "hand_L", "hand_R", "thigh_L", "thigh_R", "calf_L", "calf_R", "foot_L", "foot_R"],
+    "max_depth": 12,
+    "allow_negative_scale": false,
+    "allow_frozen_transforms_only": true,
+    "joint_orient_tolerance_deg": 0.5
+  },
+  "skin": {
+    "max_influences": 4,
+    "weight_sum_tolerance": 0.001,
+    "normalize": true,
+    "allowed_deformers": ["skinCluster", "blendShape", "cluster", "wrap"]
+  },
+  "export": {
+    "fbx": {
+      "up_axis": "Y",
+      "unit": "cm",
+      "bake_animation": true,
+      "include_constraints": false,
+      "include_meshes": true,
+      "frame_range": [1, 120]
+    },
+    "usd": {
+      "up_axis": "Y",
+      "export_skel": true
+    }
+  },
+  "ue": {
+    "skeleton_asset": "/Game/Characters/Default/SK_Default",
+    "ik_retargeter": "",
+    "skeleton_mapping": {},
+    "animation_compression": "Default",
+    "allow_mesh_deformer": false
+  }
+}
