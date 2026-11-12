@@ -1,4 +1,5 @@
 __pycache__/
+.workbuddy/
 *.py[cod]
 *.pyd
 *.so
