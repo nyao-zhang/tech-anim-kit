@@ -335,6 +335,144 @@
             });
     }
 
+    // ------------------------------------------------- 批次 3：AI 工作台
+    function aiState(text, ok) {
+        var badge = $("aiState");
+        var cls = "tak-state";
+        if (ok === true) { cls += " tak-state-pass"; }
+        if (ok === false) { cls += " tak-state-fail"; }
+        badge.className = cls;
+        badge.textContent = text;
+    }
+
+    function aiPrint(id, value) {
+        $(id).textContent = (typeof value === "string")
+            ? value : JSON.stringify(value, null, 2);
+    }
+
+    function aiGet(path, outputId, label) {
+        aiState(label + " 运行中", null);
+        return request(path).then(function (data) {
+            aiPrint(outputId, data);
+            aiState(label + " 完成", true);
+            return data;
+        }).catch(function (err) {
+            aiPrint(outputId, { ok: false, error: err.message });
+            aiState(label + " 失败", false);
+        });
+    }
+
+    function aiPost(path, payload, outputId, label) {
+        aiState(label + " 运行中", null);
+        return request(path, { method: "POST", body: payload }).then(function (data) {
+            aiPrint(outputId, data);
+            aiState(label + " 完成", true);
+            return data;
+        }).catch(function (err) {
+            aiPrint(outputId, { ok: false, error: err.message });
+            aiState(label + " 失败", false);
+        });
+    }
+
+    function agentSnapshot() {
+        try { return snapshotPayload(); } catch (err) { return null; }
+    }
+
+    function agentCall(action, extra, label) {
+        var payload = {
+            action: action,
+            session_id: "web",
+            message: $("agentInput").value.trim()
+        };
+        var snap = agentSnapshot();
+        if (snap) { payload.snapshot = snap; }
+        if (extra) {
+            Object.keys(extra).forEach(function (key) { payload[key] = extra[key]; });
+        }
+        return aiPost("/api/agent", payload, "agentOutput", label || "对话");
+    }
+
+    function parseJsonInput(id, label, outputId) {
+        var raw = $(id).value.trim();
+        if (!raw) { return null; }
+        try { return JSON.parse(raw); } catch (err) {
+            aiPrint(outputId, { ok: false, error: label + " JSON 解析失败：" + err.message });
+            aiState(label + " 输入无效", false);
+            return undefined;
+        }
+    }
+
+    function bindAI() {
+        var tabs = document.querySelectorAll(".tak-ai-tab");
+        var panes = document.querySelectorAll(".tak-ai-pane");
+        Array.prototype.forEach.call(tabs, function (tab) {
+            tab.addEventListener("click", function () {
+                Array.prototype.forEach.call(tabs, function (other) {
+                    other.className = "tak-btn tak-ai-tab";
+                    other.setAttribute("aria-selected", "false");
+                });
+                tab.className = "tak-btn tak-ai-tab is-active";
+                tab.setAttribute("aria-selected", "true");
+                var active = tab.getAttribute("data-tab");
+                Array.prototype.forEach.call(panes, function (pane) {
+                    pane.hidden = pane.getAttribute("data-pane") !== active;
+                });
+            });
+        });
+
+        $("agentSendBtn").addEventListener("click", function () {
+            agentCall("chat", null, "对话");
+        });
+        $("agentPlanBtn").addEventListener("click", function () {
+            var text = $("agentInput").value.trim();
+            $("agentInput").value = (text ? text + " " : "") + "plan 生成修复计划";
+            agentCall("chat", null, "修复计划");
+        });
+        $("agentDryRunBtn").addEventListener("click", function () {
+            agentCall("confirm", {
+                plan_id: $("agentPlanId").value.trim(),
+                confirm: false, dry_run: true, granted: []
+            }, "dry-run 预览");
+        });
+        $("agentConfirmBtn").addEventListener("click", function () {
+            agentCall("confirm", {
+                plan_id: $("agentPlanId").value.trim(),
+                confirm: true, dry_run: false, granted: ["node.write"]
+            }, "确认执行");
+        });
+
+        $("kbSearchBtn").addEventListener("click", function () {
+            var query = $("kbInput").value.trim();
+            if (!query) {
+                aiPrint("kbOutput", { ok: false, error: "请输入检索词" });
+                aiState("知识库检索待输入", false);
+                return;
+            }
+            aiGet("/api/knowledge?q=" + encodeURIComponent(query) + "&top_k=3",
+                  "kbOutput", "知识库检索");
+        });
+
+        $("visionRunBtn").addEventListener("click", function () {
+            var frames = parseJsonInput("visionInput", "帧列表", "visionOutput");
+            if (frames === undefined) { return; }
+            var payload = { frames: frames || [] };
+            var snap = agentSnapshot();
+            if (snap) { payload.snapshot = snap; }
+            aiPost("/api/vision", payload, "visionOutput", "抽帧诊断");
+        });
+
+        $("mappingRunBtn").addEventListener("click", function () {
+            var data = parseJsonInput("mappingInput", "骨骼列表", "mappingOutput");
+            if (data === undefined) { return; }
+            data = data || {};
+            aiPost("/api/mapping", {
+                source_bones: data.source_bones || [],
+                target_bones: data.target_bones || [],
+                options: data.options || {}
+            }, "mappingOutput", "骨骼映射");
+        });
+    }
+
     // --------------------------------------------------------------- 启动
     function bind() {
         $("themeToggle").addEventListener("click", function () {
@@ -381,6 +519,7 @@
     function boot() {
         applyTheme(currentTheme());
         bind();
+        bindAI();
         request("/api/health").then(function (data) {
             setService(true, "在线 · " + (data.dcc || "离线"));
             $("statusVersion").textContent = "TAK " + (data.version || "—");

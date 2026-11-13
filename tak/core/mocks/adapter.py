@@ -11,7 +11,6 @@ from typing import Any, Callable, Dict, List, Optional
 
 from tak.adapters.base import Capability, DCC, DCCAdapter
 
-from ._common import depth_map
 from .scene import MockScene
 
 _CAPABILITIES = (
@@ -32,7 +31,9 @@ def _require(name: str) -> Any:
 
 def _records(names: List[str], parents: Dict[str, Optional[str]],
              scene: MockScene) -> List[Dict[str, Any]]:
-    depths = depth_map(parents)
+    # depth 以 MockScene 的声明值为准：它代表「宿主场景里真实存在的层级」，
+    # 也是坏 fixture 注入层级违规的载体。若改用 parent 链重算，注入的
+    # depth 会被“修正”回合法值，导致规则回归漏报（批次 3 实测踩到过）。
     records: List[Dict[str, Any]] = []
     for name in names:
         joint = scene.joints[name]
@@ -40,7 +41,7 @@ def _records(names: List[str], parents: Dict[str, Optional[str]],
             "name": name,
             "parent": parents.get(name),
             "matrix": list(joint.matrix),
-            "depth": depths.get(name, joint.depth),
+            "depth": int(joint.depth),
             "scale": list(joint.scale),
             "rotate": list(joint.rotate),
             "namespace": joint.namespace,
@@ -52,14 +53,13 @@ def _read_maya(scene: MockScene) -> List[Dict[str, Any]]:
     cmds = _require("maya.cmds")
     names = list(cmds.ls(type="joint"))
     parents = {name: (cmds.listRelatives(name, parent=True) or [None])[0] for name in names}
-    depths = depth_map(parents)
     records: List[Dict[str, Any]] = []
     for name in names:
         records.append({
             "name": name,
             "parent": parents[name],
             "matrix": list(cmds.getAttr(name + ".matrix")),
-            "depth": depths.get(name, 0),
+            "depth": int(scene.joints[name].depth),
             "scale": [cmds.getAttr(name + ".scaleX"), cmds.getAttr(name + ".scaleY"),
                       cmds.getAttr(name + ".scaleZ")],
             "rotate": [cmds.getAttr(name + ".rotateX"), cmds.getAttr(name + ".rotateY"),
@@ -73,14 +73,13 @@ def _read_max(scene: MockScene) -> List[Dict[str, Any]]:
     runtime = _require("pymxs.runtime")
     nodes = [node for node in runtime.objects if runtime.classOf(node) == "BoneGeometry"]
     parents = {node.name: (node.parent.name if node.parent is not None else None) for node in nodes}
-    depths = depth_map(parents)
     records: List[Dict[str, Any]] = []
     for node in nodes:
         records.append({
             "name": node.name,
             "parent": parents[node.name],
             "matrix": list(node.transform),
-            "depth": depths.get(node.name, 0),
+            "depth": int(scene.joints[node.name].depth),
             "scale": list(node.scale),
             "rotate": list(node.rotation),
             "namespace": scene.joints[node.name].namespace,
@@ -94,14 +93,13 @@ def _read_mobu(scene: MockScene) -> List[Dict[str, Any]]:
               if isinstance(model, pyfbsdk.FBModelSkeleton)]
     parents = {model.Name: (model.Parent.Name if model.Parent is not None else None)
                for model in models}
-    depths = depth_map(parents)
     records: List[Dict[str, Any]] = []
     for model in models:
         records.append({
             "name": model.Name,
             "parent": parents[model.Name],
             "matrix": list(model.Matrix),
-            "depth": depths.get(model.Name, 0),
+            "depth": int(scene.joints[model.Name].depth),
             "scale": list(model.Scaling),
             "rotate": list(model.Rotation),
             "namespace": scene.joints[model.Name].namespace,

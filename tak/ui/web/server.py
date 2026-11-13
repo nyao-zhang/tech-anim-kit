@@ -80,6 +80,11 @@ class ApiError(Exception):
 
 
 _ENV_LOCK = threading.Lock()
+_AI_LOCK = threading.Lock()
+_AGENT_SESSIONS: Dict[str, Any] = {}
+_KNOWLEDGE_BASE: Any = None
+# Web 服务只绑定 127.0.0.1 且无鉴权，因此这里再收窄一次可授予的写权限。
+_GRANTABLE_PERMISSIONS = frozenset({"node.write"})
 
 
 @contextlib.contextmanager
@@ -190,6 +195,7 @@ def _api_health() -> Dict[str, Any]:
         "dcc": _detect_dcc(),
         "dccs": list(DCC_LIST),
         "service": "tak-web-panel",
+        "ai": _ai_modules(),
     }
 
 
@@ -257,6 +263,139 @@ def _api_report(query: Dict[str, Any], repo_root: Optional[str]) -> Dict[str, An
     return payload
 
 
+# --------------------------------------------------------------------------- #
+# 批次 3：AI 工作台端点
+#
+# 边界：所有端点直接调用 tak.core 的纯 Python 模块，判定与候选生成仍是确定性
+# 的；/api/agent 是唯一可能触及 DSL 执行的入口，且服务端强制二次确认 + 权限
+# 白名单，浏览器单方面传 confirm=true 也不足以写场景。
+# --------------------------------------------------------------------------- #
+def _ai_modules() -> Dict[str, bool]:
+    import importlib.util
+
+    found = {}
+    for name in ("agent", "knowledge", "vision", "mapping"):
+        try:
+            found[name] = importlib.util.find_spec("tak.core.%s" % name) is not None
+        except Exception:
+            found[name] = False
+    return found
+
+
+def _agent_session(session_id: str) -> Any:
+    try:
+        from tak.core.agent.session import AgentSession
+    except Exception as exc:
+        raise ApiError(503, "Agent Console 模块未就绪: %s: %s"
+                       % (type(exc).__name__, exc))
+    with _AI_LOCK:
+        session = _AGENT_SESSIONS.get(session_id)
+        if session is None:
+            session = AgentSession(session_id=session_id)
+            _AGENT_SESSIONS[session_id] = session
+        return session
+
+
+def _knowledge_base() -> Any:
+    global _KNOWLEDGE_BASE
+    try:
+        from tak.core.knowledge import KnowledgeBase
+    except Exception as exc:
+        raise ApiError(503, "知识库模块未就绪: %s: %s"
+                       % (type(exc).__name__, exc))
+    with _AI_LOCK:
+        if _KNOWLEDGE_BASE is None:
+            _KNOWLEDGE_BASE = KnowledgeBase()
+        return _KNOWLEDGE_BASE
+
+
+def _api_agent(body: Any, repo_root: Optional[str]) -> Dict[str, Any]:
+    data = _parse_body(body)
+    session_id = str(data.get("session_id") or "web").strip() or "web"
+    action = str(data.get("action") or "chat").strip().lower()
+    snapshot = _snapshot_of(data)
+    with _plugin_scope(repo_root):
+        session = _agent_session(session_id)
+        if action == "reset":
+            with _AI_LOCK:
+                _AGENT_SESSIONS.pop(session_id, None)
+            return {"ok": True, "action": action, "session_id": session_id,
+                    "result": {"status": "reset"}}
+        if action == "history":
+            result = session.history()
+        elif action == "describe":
+            result = session.describe()
+        elif action == "confirm":
+            plan_id = str(data.get("plan_id") or "").strip()
+            if not plan_id:
+                raise ApiError(400, "缺少 plan_id")
+            granted = [str(item) for item in (data.get("granted") or [])
+                       if str(item) in _GRANTABLE_PERMISSIONS]
+            wants_write = bool(data.get("confirm") is True
+                               and data.get("dry_run", True) is False
+                               and "node.write" in granted)
+            # 只要条件没齐，一律退化为 dry-run 预览，绝不把写权限交给浏览器。
+            result = session.confirm(
+                plan_id,
+                confirm=wants_write,
+                granted=granted if wants_write else [],
+                dry_run=not wants_write,
+            )
+        elif action == "chat":
+            result = session.chat(str(data.get("message") or ""), snapshot=snapshot)
+        else:
+            raise ApiError(400, "未知 action: %s" % action)
+    return {"ok": True, "action": action, "session_id": session_id,
+            "result": _payload_of(result)}
+
+
+def _api_knowledge(query: Dict[str, Any], body: Any) -> Dict[str, Any]:
+    data = _parse_body(body) if body is not None else {}
+    term = _first(query.get("q") or query.get("query")) or str(data.get("query") or "")
+    term = term.strip()
+    if not term:
+        raise ApiError(400, "缺少检索词 q / query")
+    try:
+        top_k = max(1, min(10, int(data.get("top_k") or _first(query.get("top_k")) or 3)))
+    except (TypeError, ValueError):
+        raise ApiError(400, "top_k 必须是 1-10 的整数")
+    hits = _knowledge_base().search(term, top_k=top_k)
+    return {"ok": True, "query": term, "top_k": top_k, "hits": hits,
+            "count": len(hits)}
+
+
+def _api_vision(body: Any) -> Dict[str, Any]:
+    try:
+        from tak.core.vision.frames import inspect_frames
+    except Exception as exc:
+        raise ApiError(503, "抽帧诊断模块未就绪: %s: %s"
+                       % (type(exc).__name__, exc))
+    data = _parse_body(body)
+    frames = data.get("frames")
+    if not isinstance(frames, list):
+        raise ApiError(400, "frames 必须是数组")
+    snapshot = _snapshot_of(data)
+    options = data.get("options") if isinstance(data.get("options"), dict) else {}
+    result = inspect_frames(frames, snapshot=snapshot, options=options)
+    return {"ok": bool(result.get("ok", True)), "result": result}
+
+
+def _api_mapping(body: Any) -> Dict[str, Any]:
+    try:
+        from tak.core.mapping import map_skeleton
+    except Exception as exc:
+        raise ApiError(503, "骨骼映射模块未就绪: %s: %s"
+                       % (type(exc).__name__, exc))
+    data = _parse_body(body)
+    source = data.get("source_bones")
+    target = data.get("target_bones")
+    if not isinstance(source, list) or not isinstance(target, list):
+        raise ApiError(400, "source_bones / target_bones 必须是数组")
+    options = data.get("options") if isinstance(data.get("options"), dict) else {}
+    result = map_skeleton(source, target, options=options)
+    return {"ok": True, "result": result}
+
+
 def handle_api(method: str, path: str, body: Any = None,
                query: Optional[Dict[str, Any]] = None,
                repo_root: Optional[str] = None) -> Tuple[int, Dict[str, Any]]:
@@ -296,6 +435,22 @@ def handle_api(method: str, path: str, body: Any = None,
             if method != "GET":
                 raise ApiError(405, "该接口只接受 GET")
             return 200, _api_report(query, repo_root)
+        if route == "/api/agent":
+            if method != "POST":
+                raise ApiError(405, "该接口只接受 POST")
+            return 200, _api_agent(body, repo_root)
+        if route == "/api/knowledge":
+            if method not in ("GET", "POST"):
+                raise ApiError(405, "该接口只接受 GET / POST")
+            return 200, _api_knowledge(query, body if method == "POST" else None)
+        if route == "/api/vision":
+            if method != "POST":
+                raise ApiError(405, "该接口只接受 POST")
+            return 200, _api_vision(body)
+        if route == "/api/mapping":
+            if method != "POST":
+                raise ApiError(405, "该接口只接受 POST")
+            return 200, _api_mapping(body)
         raise ApiError(404, "未知接口: %s" % route)
     except ApiError as exc:
         return exc.status, {"ok": False, "error": exc.message}

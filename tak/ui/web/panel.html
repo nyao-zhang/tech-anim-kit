@@ -114,6 +114,85 @@
       </div>
     </section>
 
+    <!-- ── 批次 3：AI 工作台（对话候选 / 知识库 / 抽帧诊断 / 骨骼映射） ── -->
+    <section class="tak-panel tak-card" id="aiWorkbench">
+      <div class="tak-header">
+        <div>
+          <h1>AI 工作台</h1>
+          <span class="tak-meta">AI 只产出候选与解释；判定走确定性规则，写入需白名单 + dry-run + 授权 + 人工确认</span>
+        </div>
+        <span id="aiState" class="tak-state">离线可跑</span>
+      </div>
+
+      <div class="tak-ai-tabs" role="tablist" aria-label="AI 工作台分区">
+        <button class="tak-btn tak-ai-tab is-active" type="button" data-tab="chat" aria-selected="true">对话候选</button>
+        <button class="tak-btn tak-ai-tab" type="button" data-tab="kb" aria-selected="false">知识库</button>
+        <button class="tak-btn tak-ai-tab" type="button" data-tab="vision" aria-selected="false">抽帧诊断</button>
+        <button class="tak-btn tak-ai-tab" type="button" data-tab="mapping" aria-selected="false">骨骼映射</button>
+      </div>
+
+      <div class="tak-ai-pane" data-pane="chat">
+        <textarea id="agentInput" class="tak-textarea" rows="3" spellcheck="false"
+                  placeholder="例如：检查这个骨架并给出修复计划 / 解释权重超限 / 检索命名规范"></textarea>
+        <div class="tak-controls">
+          <div class="tak-control-actions">
+            <button id="agentSendBtn" class="tak-btn tak-btn-primary" type="button">发送（只产出候选）</button>
+            <button id="agentPlanBtn" class="tak-btn" type="button">生成修复计划</button>
+          </div>
+          <span class="tak-hint">对话绝不写场景；计划只做 dry-run 预览。</span>
+        </div>
+        <div class="tak-controls">
+          <label class="tak-field">
+            <span class="tak-field-label">待确认计划 ID</span>
+            <input id="agentPlanId" class="tak-input" type="text" placeholder="plan-1" autocomplete="off">
+          </label>
+          <div class="tak-control-actions">
+            <button id="agentDryRunBtn" class="tak-btn" type="button">dry-run 预览</button>
+            <button id="agentConfirmBtn" class="tak-btn" type="button">授权并确认执行</button>
+          </div>
+        </div>
+        <pre id="agentOutput" class="tak-ai-output">尚未对话。</pre>
+      </div>
+
+      <div class="tak-ai-pane" data-pane="kb" hidden>
+        <label class="tak-field">
+          <span class="tak-field-label">检索绑定知识库</span>
+          <input id="kbInput" class="tak-input" type="search" placeholder="例如：权重归一化 / FBX 根运动 / IK 链映射" autocomplete="off">
+        </label>
+        <div class="tak-controls">
+          <div class="tak-control-actions">
+            <button id="kbSearchBtn" class="tak-btn tak-btn-primary" type="button">检索</button>
+          </div>
+          <span class="tak-hint">本地离线倒排索引，结果带 doc_id / 标题 / 片段引用。</span>
+        </div>
+        <pre id="kbOutput" class="tak-ai-output">输入关键词后检索。</pre>
+      </div>
+
+      <div class="tak-ai-pane" data-pane="vision" hidden>
+        <textarea id="visionInput" class="tak-textarea" rows="4" spellcheck="false"
+                  placeholder='粘贴帧列表 JSON，例如 [{"frame": 1, "image": "data:image/png;base64,..."}]'></textarea>
+        <div class="tak-controls">
+          <div class="tak-control-actions">
+            <button id="visionRunBtn" class="tak-btn tak-btn-primary" type="button">诊断候选</button>
+          </div>
+          <span class="tak-hint">帧号越界 / 非法类别 / 未知骨骼会被确定性过滤；离线时标注 fallback。</span>
+        </div>
+        <pre id="visionOutput" class="tak-ai-output">尚未诊断。</pre>
+      </div>
+
+      <div class="tak-ai-pane" data-pane="mapping" hidden>
+        <textarea id="mappingInput" class="tak-textarea" rows="4" spellcheck="false"
+                  placeholder='粘贴 {"source_bones": [...], "target_bones": [...]} 骨骼名列表'></textarea>
+        <div class="tak-controls">
+          <div class="tak-control-actions">
+            <button id="mappingRunBtn" class="tak-btn tak-btn-primary" type="button">生成映射候选</button>
+          </div>
+          <span class="tak-hint">冲突项保留给人工确认，不会自动裁决。</span>
+        </div>
+        <pre id="mappingOutput" class="tak-ai-output">尚未映射。</pre>
+      </div>
+    </section>
+
     <section class="tak-panel tak-card">
       <div class="tak-header">
         <div>

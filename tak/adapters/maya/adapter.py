@@ -42,6 +42,9 @@ _SUPPORTED_CAPABILITIES = frozenset({
     Capability.FBX_EXPORT,
     Capability.UNDO_SCOPE,
     Capability.UI_HOST,
+    # P4.4：写方法已落地，DSL 动作不再只是安全 no-op。
+    Capability.NODE_WRITE,
+    Capability.WEIGHT_WRITE,
 })
 
 
@@ -295,6 +298,141 @@ class MayaAdapter(DCCAdapter):
             snapshot["version"] = self.version
             return snapshot
 
+    # ---------------------------------------------------------------- 写操作
+    # P4.4：spec_enforcer 的 DSL 动作通过 getattr 调用下面四个方法。它们只在
+    # ACTION_REGISTRY.execute 开启的 undo chunk 内被调用，真机异常必须冒泡，
+    # 由执行器整体 rollback；宿主不可用 / 节点不存在才返回可预测的 skipped。
+    def rename_node(self, node: str, name: str) -> Dict[str, Any]:
+        """重命名节点（返回实际新名，Maya 可能自动追加序号避免重名）。"""
+        old, target = _short_name(node), _short_name(name)
+        if not old or not target:
+            return _write_result("rename_node", "skipped", reason="节点名或目标名为空")
+        cmds = self._cmds()
+        if cmds is None:
+            return _write_result("rename_node", "skipped", reason="maya 环境不可用")
+        scene = getattr(cmds, "tak_scene", None)
+        if scene is not None:
+            self._mock_write(scene, "rename_node", node=old, name=target)
+            return _write_result("rename_node", "done", node=old, name=target, mock=True)
+        if old == target:
+            return _write_result("rename_node", "skipped", reason="目标名与当前名相同")
+        if not bool(_get(cmds, "objExists", False, old)):
+            return _write_result("rename_node", "skipped", reason="节点不存在")
+        actual = _short_name(cmds.rename(old, target) or target)
+        self.log("rename_node %s -> %s 完成" % (old, actual))
+        return _write_result("rename_node", "done", node=old, name=actual)
+
+    def set_control_color(self, node: str, color: int) -> Dict[str, Any]:
+        """设置控制器 override color（Maya 颜色索引 0-31）。"""
+        old = _short_name(node)
+        index = max(0, min(31, _as_int(color, 0)))
+        cmds = self._cmds()
+        if cmds is None:
+            return _write_result("set_control_color", "skipped", reason="maya 环境不可用")
+        scene = getattr(cmds, "tak_scene", None)
+        if scene is not None:
+            self._mock_write(scene, "set_control_color", node=old, color=index)
+            return _write_result("set_control_color", "done", node=old, color=index, mock=True)
+        if not bool(_get(cmds, "objExists", False, old)):
+            return _write_result("set_control_color", "skipped", reason="节点不存在")
+        cmds.setAttr("%s.overrideEnabled" % old, True)
+        cmds.setAttr("%s.overrideColor" % old, index)
+        self.log("set_control_color %s -> %d 完成" % (old, index))
+        return _write_result("set_control_color", "done", node=old, color=index)
+
+    def normalize_weights(self, max_influences: Optional[int] = None,
+                          tolerance: Optional[float] = None) -> Dict[str, Any]:
+        """归一化全部 skinCluster 的采样顶点权重，可先裁剪到影响骨上限。
+
+        真机逐顶点写回 ``skinPercent -tv``；任何写入异常都冒泡给 DSL 执行器，
+        由外层 undo chunk 整体回滚。采样上限沿用 ``max_sample_vertices``。
+        """
+        limit = max(0, _as_int(max_influences, 0))
+        epsilon = _as_float(tolerance, _WEIGHT_EPSILON) if tolerance is not None \
+            else _WEIGHT_EPSILON
+        cmds = self._cmds()
+        if cmds is None:
+            return _write_result("normalize_weights", "skipped", reason="maya 环境不可用")
+        scene = getattr(cmds, "tak_scene", None)
+        if scene is not None:
+            self._mock_write(scene, "normalize_weights", max_influences=limit,
+                             tolerance=epsilon)
+            return _write_result("normalize_weights", "done", changed_vertices=0,
+                                 clusters=0, mock=True)
+        clusters = [_short_name(item) for item in
+                    (_get(cmds, "ls", [], type="skinCluster") or []) if item]
+        changed = 0
+        for cluster in clusters[:_MAX_MESHES]:
+            influences = [_short_name(item) for item in
+                          (_get(cmds, "skinCluster", [], cluster, q=True,
+                                influence=True) or []) if item]
+            geometries = [str(item) for item in
+                          (_get(cmds, "skinCluster", [], cluster, q=True,
+                                geometry=True) or []) if item]
+            if not influences:
+                continue
+            for geometry in geometries[:_MAX_MESHES]:
+                count = self._vertex_count(cmds, geometry)
+                for index in range(min(count, int(self.max_sample_vertices))):
+                    vertex = "%s.vtx[%d]" % (_short_name(geometry).rsplit("|", 1)[-1], index)
+                    values = _get(cmds, "skinPercent", [], cluster, vertex,
+                                  q=True, value=True)
+                    if not values or len(values) != len(influences):
+                        continue
+                    pairs = [(bone, _as_float(weight))
+                             for bone, weight in zip(influences, values)
+                             if _as_float(weight) > epsilon]
+                    if limit:
+                        pairs = sorted(pairs, key=lambda item: item[1], reverse=True)[:limit]
+                    total = sum(weight for _, weight in pairs)
+                    if total <= 0:
+                        continue
+                    cmds.skinPercent(cluster, vertex,
+                                     tv=[(bone, weight / total) for bone, weight in pairs],
+                                     normalize=True)
+                    changed += 1
+        self.log("normalize_weights 完成：%d 个顶点 / %d 个 skinCluster"
+                 % (changed, len(clusters)))
+        return _write_result("normalize_weights", "done", changed_vertices=changed,
+                             clusters=len(clusters))
+
+    def set_namespace(self, node: str, namespace: str) -> Dict[str, Any]:
+        """把节点移入命名空间；空字符串表示移回根命名空间。"""
+        old = _short_name(node)
+        target_ns = str(namespace or "").strip().strip(":")
+        cmds = self._cmds()
+        if cmds is None:
+            return _write_result("set_namespace", "skipped", reason="maya 环境不可用")
+        scene = getattr(cmds, "tak_scene", None)
+        if scene is not None:
+            self._mock_write(scene, "set_namespace", node=old, namespace=target_ns)
+            return _write_result("set_namespace", "done", node=old,
+                                 namespace=target_ns, mock=True)
+        if not bool(_get(cmds, "objExists", False, old)):
+            return _write_result("set_namespace", "skipped", reason="节点不存在")
+        if target_ns and not bool(_get(cmds, "namespace", False, exists=target_ns)):
+            cmds.namespace(add=target_ns)
+        bare = old.rsplit(":", 1)[-1]
+        target = ("%s:%s" % (target_ns, bare)) if target_ns else bare
+        if target != old:
+            actual = _short_name(cmds.rename(old, target) or target)
+        else:
+            actual = old
+        self.log("set_namespace %s -> %s 完成" % (old, actual))
+        return _write_result("set_namespace", "done", node=old, namespace=target_ns,
+                             name=actual)
+
+    @staticmethod
+    def _mock_write(scene: Any, action: str, **payload: Any) -> None:
+        """离线 mock 桥接：把写入记进场景日志，便于测试与四端一致性回归。"""
+        try:
+            metadata = getattr(scene, "metadata", None)
+            if isinstance(metadata, dict):
+                metadata.setdefault("write_log", []).append(
+                    dict(action=action, **payload))
+        except Exception:
+            pass
+
     # ---------------------------------------------------------------- 撤销
     def begin_undo(self, label: str = "TAK") -> str:
         cmds = self._cmds()
@@ -462,6 +600,10 @@ class MayaAdapter(DCCAdapter):
     def _capture(self, cmds: Any, root: Optional[str]) -> Dict[str, Any]:
         names = [_short_name(item) for item in (_get(cmds, "ls", [], type="joint") or []) if item]
         names = _unique(names)
+        # mock / 离线桥接场景：真实 Maya 节点名自带 namespace、单位与帧范围，
+        # 但假宿主把这三类信息单独存在 MockScene 上，因此在真机路径读不到时
+        # 优先用桥接值补齐；无 tak_scene 时行为与批次 2 完全一致。
+        scene = getattr(cmds, "tak_scene", None)
         # 两遍扫描：先建完整 parent 表，再算 depth，避免 ls 顺序影响层级深度。
         parents: Dict[str, Optional[str]] = {}
         for name in names:
@@ -469,26 +611,40 @@ class MayaAdapter(DCCAdapter):
             parents[name] = parent if parent in names else None
         joints: Dict[str, Dict[str, Any]] = {}
         for name in names:
+            scene_joint = _bridge_joint(scene, name)
+            depth = _depth_of(name, parents)
+            namespace = _namespace_of(name)
+            if scene_joint is not None:
+                depth = _as_int(getattr(scene_joint, "depth", depth), depth)
+                namespace = namespace or str(getattr(scene_joint, "namespace", "") or "")
             joints[name] = {
                 "parent": parents[name],
                 "matrix": self._world_matrix(cmds, name),
-                "depth": _depth_of(name, parents),
+                "depth": depth,
                 "scale": self._triple(cmds, name, "scale", [1.0, 1.0, 1.0]),
                 "rotate": self._triple(cmds, name, "rotate", [0.0, 0.0, 0.0]),
-                "namespace": _namespace_of(name),
+                "namespace": namespace,
             }
 
         meshes = [_short_name(item) for item in (_get(cmds, "ls", [], type="mesh") or []) if item]
         meshes = _unique(meshes)[:_MAX_MESHES]
         skin = self._aggregate_skin(cmds, meshes)
 
+        version = str(self.version or getattr(scene, "version", "")
+                      or _get(cmds, "about", "", version=True))
+        unit = str(getattr(scene, "unit", "") or _unit_of(cmds))
+        up_axis = str(getattr(scene, "up_axis", "") or _up_axis_of(cmds))
+        frame_range = getattr(scene, "frame_range", None) if scene is not None else None
+        if not isinstance(frame_range, (list, tuple)) or len(frame_range) != 2:
+            frame_range = _frame_range(cmds)
+
         snapshot = {
             "dcc": "maya",
-            "version": str(self.version or _get(cmds, "about", "", version=True)),
-            "unit": _unit_of(cmds),
-            "up_axis": _up_axis_of(cmds),
+            "version": version,
+            "unit": unit,
+            "up_axis": up_axis,
             "joints": joints,
-            "frame_range": _frame_range(cmds),
+            "frame_range": [float(frame_range[0]), float(frame_range[1])],
             "skin": skin,
             "metadata": {
                 "source": "tak.adapters.maya",
@@ -596,6 +752,23 @@ def create_adapter(**kwargs: Any) -> MayaAdapter:
 # --------------------------------------------------------------------------- #
 # 纯函数工具
 # --------------------------------------------------------------------------- #
+def _bridge_joint(scene: Any, name: str) -> Any:
+    """取 mock 桥接场景中的关节对象；真机无 tak_scene 时返回 None。"""
+    if scene is None:
+        return None
+    joints = getattr(scene, "joints", None)
+    if not isinstance(joints, dict):
+        return None
+    return joints.get(name)
+
+
+def _write_result(action: str, status: str, **extra: Any) -> Dict[str, Any]:
+    """写方法的统一返回结构：DSL 动作会把 dict 里的标量透传到日志。"""
+    result: Dict[str, Any] = {"status": status, "action": action}
+    result.update(extra)
+    return result
+
+
 def _empty_skin(mesh: str = "") -> Dict[str, Any]:
     return {
         "mesh": mesh,

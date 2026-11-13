@@ -31,6 +31,8 @@ jobs:
         run: python validation/py_compat_smoke.py
       - name: Tool plugins are discoverable
         run: python tools/new_tool.py --list
+      - name: Four-DCC conformance regression (40 golden fixtures)
+        run: python validation/four_dcc_regression.py --out validation/four_dcc_ci.json
       - name: Python 3.9 syntax scan (all shipped code)
         run: |
           python - <<'PY'

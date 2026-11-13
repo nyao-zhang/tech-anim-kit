@@ -1,0 +1,10 @@
+{
+  "id": "rig_kb",
+  "name": "绑定知识库 RAG",
+  "description": "本地离线 BM25 片段检索：从仓库 knowledge/*.md 种子文档返回带 doc_id/title/section/excerpt 引用的命中片段，供 Agent Console 注入上下文与 Web /api/knowledge 调用。中文用单字+bigram、英文用小写词元，零第三方依赖、零 DCC import；默认离线、不联网、不写场景，排序与评分完全可复现。",
+  "dcc": ["maya", "max", "mobu", "unreal"],
+  "min_version": { "maya": "2023", "max": "2023", "mobu": "2023", "unreal": "5.8" },
+  "entry": "rig_kb",
+  "ui": "web",
+  "permissions": ["scene.read"]
+}

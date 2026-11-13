@@ -74,3 +74,25 @@ python tools/new_tool.py --list
 3. 本机既有 `acc_*.cp37/cp39/cp311.pyd` 为编译二进制，**未嵌入仓库**（见 LEGACY_MAPPING.md），新代码保持纯 Python。
 4. headless commandlet 无法验证任何 GUI 交互（Qt dock、菜单点击、Widget 渲染），全部归入 B6/B7。
 5. 探测脚本只做 `compile()` 语法检查，不代表 `acc_*.py` 在运行时能脱离 pyd 正常工作；功能级迁移由 P0.5 / P3.1 负责。
+
+---
+
+## E. 批次 3 新增复验清单（P4 / P5）
+
+批次 3 的代码全部先在离线 mock 与 CI 中回归（见 `docs/BATCH3_REPORT.md`）。下面这些必须依赖真实宿主、GUI 或真实 AI 端点，仍需你逐项复验并回填。
+
+| # | 环境 | 步骤 | 通过标准 |
+|---|---|---|---|
+| B11 | **3ds Max 2023+**（本机仅 2019/2021） | 在 Max Python 监听器执行：`import sys; sys.path.insert(0, r'<repo>'); from tak.adapters.max import is_available, create_adapter; print(is_available()); a=create_adapter(); print(len(a.list_nodes()))`；再建一段 BoneGeometry 层级 + Skin 修改器，跑 `a.get_skeleton_snapshot()` 与 `a.export_fbx()` | `is_available()=True`；关节数/层级/单位轴向与场景一致；导出产生 `.fbx` 与 `.snapshot.json`；skin 摘要能读到真实权重、影响骨上限与权重和偏差 |
+| B12 | **3ds Max 2023+ 菜单与写入** | 执行 `from tak.adapters.max.init_max import initialize; initialize()`；再跑一次 `spec_enforcer` 的四个 DSL 动作（dry-run → 授权 → 确认） | 菜单出现且可点击；四个写方法真实改到节点；`rollback()` 能把状态日志里的旧值逐项恢复，场景无残留 |
+| B13 | **MotionBuilder 2023**（GUI） | 打开 MoBu，执行 B11 同结构的导入（换 `tak.adapters.mobu`），跑 `list_nodes` / `get_skeleton_snapshot` / `export_fbx` / `init_mobu.initialize()` | `pyfbsdk` 可用、`FBModelSkeleton` 识别正确；快照与 Maya 端同一骨架 `compare_snapshots` 无差异；FBX + sidecar 生成；菜单可点击 |
+| B14 | **MoBu 写入与抽帧** | 跑四个 DSL 动作并检查 `rollback()`；用 `FBApplication` 或 Playblast 导出若干帧 | 写入生效且可回滚；帧列表能作为 `defect_inspector` 的输入（帧号、图片 data URI/URL、骨骼名） |
+| B15 | **四端一致性回归（真机）** | 在 Maya / Max / MoBu / UE 各自的内置 Python 里跑 `python validation/four_dcc_regression.py --dccs <本端>`，并与离线 mock 结果对比 | 每端 `ok=true`、漏报/误报 0、契约错误 0；把结果 JSON 回填到仓库 `validation/` |
+| B16 | **Agent Console + 真实 provider** | 设 `TAK_AI_OFFLINE=0`、`TAK_AI_API_KEY`、`TAK_AI_BASE_URL`，在 Web 面板发送「检查这个骨架并给出修复计划」；再尝试让模型输出未注册动作或自由脚本 | 候选必须是参数化 JSON 且被白名单校验；未注册动作/自由脚本一律 `rejected`；`chat` 零场景改写；只有 `confirm(confirm=True, dry_run=False, granted=["node.write"])` 才执行，且失败整体回滚 |
+| B17 | **Skeleton Mapper 真实资产** | 用真实 UE IK Rig / Retargeter 与 Mixamo/Biped 骨架调 `map_skeleton()`，导出 mapping asset 并在 UE 侧导入 | 必需链 root/pelvis 覆盖；冲突项保留不自动选择；导出的 JSON 能被 `ik_retarget_guard.load_mapping_asset()` 读回；UE 中链映射与肉眼一致 |
+| B18 | **VLM Defect Inspector 真实多模态** | 用 B9 的 Playblast 抽帧，配置 `TAK_AI_OFFLINE=0` 且端点支持 `image_url`，跑 `/api/vision` | 返回候选带帧号/类别/骨骼/置信度；帧号越界、类别不在白名单、骨骼不存在都被确定性过滤；离线时明确标注 `deterministic_fallback`，不伪称模型识别 |
+| B19 | **绑定知识库 RAG** | 把项目私有规范（命名、权重、导出）以 `.md` 放进 `knowledge/`，重跑 `/api/knowledge` 与 Agent Console 的检索式提问 | 命中预期文档、引用含 doc_id/title/section；相同 query 两次结果一致；离线不联网、不写缓存 |
+| B20 | **Web AI 工作台（GUI）** | 在 Chrome 与 UE 内嵌浏览器打开面板，使用对话/知识库/诊断三个入口，切换深浅主题 | 无 CDN/外链、无硬编码颜色；交互不阻塞主线程；错误以 JSON 提示、不暴露 traceback |
+
+回填格式：`B11 ✅ 3dsMax2025 / Python3.11 / 备注：…`。
+所有真机结论都以本机实测证据为准；离线 mock 与 CI 的 PASS **不能替代**上述项目。

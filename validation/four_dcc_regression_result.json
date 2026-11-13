@@ -1,0 +1,357 @@
+{
+  "capabilities": {
+    "contract": "1.0",
+    "dccs": {
+      "max": {
+        "capabilities": {
+          "capture.playblast": false,
+          "export.fbx": true,
+          "export.usd": false,
+          "import.validate": false,
+          "mldeformer.train": false,
+          "node.write": true,
+          "scene.query": true,
+          "skeleton.snapshot": true,
+          "skin.query": true,
+          "skin.write": true,
+          "ui.host": true,
+          "undo.scope": true
+        },
+        "conformant": true,
+        "missing_required": [],
+        "name": "max"
+      },
+      "maya": {
+        "capabilities": {
+          "capture.playblast": false,
+          "export.fbx": true,
+          "export.usd": false,
+          "import.validate": false,
+          "mldeformer.train": false,
+          "node.write": true,
+          "scene.query": true,
+          "skeleton.snapshot": true,
+          "skin.query": true,
+          "skin.write": true,
+          "ui.host": true,
+          "undo.scope": true
+        },
+        "conformant": true,
+        "missing_required": [],
+        "name": "maya"
+      },
+      "mobu": {
+        "capabilities": {
+          "capture.playblast": false,
+          "export.fbx": true,
+          "export.usd": false,
+          "import.validate": false,
+          "mldeformer.train": false,
+          "node.write": true,
+          "scene.query": true,
+          "skeleton.snapshot": true,
+          "skin.query": true,
+          "skin.write": true,
+          "ui.host": true,
+          "undo.scope": true
+        },
+        "conformant": true,
+        "missing_required": [],
+        "name": "mobu"
+      },
+      "unreal": {
+        "capabilities": {
+          "capture.playblast": false,
+          "export.fbx": false,
+          "export.usd": false,
+          "import.validate": true,
+          "mldeformer.train": false,
+          "node.write": false,
+          "scene.query": true,
+          "skeleton.snapshot": true,
+          "skin.query": true,
+          "skin.write": false,
+          "ui.host": false,
+          "undo.scope": false
+        },
+        "conformant": true,
+        "missing_required": [],
+        "name": "unreal"
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "good_001",
+      "ok": true
+    },
+    {
+      "id": "good_002",
+      "ok": true
+    },
+    {
+      "id": "good_003",
+      "ok": true
+    },
+    {
+      "id": "good_004",
+      "ok": true
+    },
+    {
+      "id": "good_005",
+      "ok": true
+    },
+    {
+      "id": "good_006",
+      "ok": true
+    },
+    {
+      "id": "good_007",
+      "ok": true
+    },
+    {
+      "id": "good_008",
+      "ok": true
+    },
+    {
+      "id": "good_009",
+      "ok": true
+    },
+    {
+      "id": "good_010",
+      "ok": true
+    },
+    {
+      "id": "good_011",
+      "ok": true
+    },
+    {
+      "id": "good_012",
+      "ok": true
+    },
+    {
+      "id": "good_013",
+      "ok": true
+    },
+    {
+      "id": "good_014",
+      "ok": true
+    },
+    {
+      "id": "good_015",
+      "ok": true
+    },
+    {
+      "id": "good_016",
+      "ok": true
+    },
+    {
+      "id": "good_017",
+      "ok": true
+    },
+    {
+      "id": "good_018",
+      "ok": true
+    },
+    {
+      "id": "good_019",
+      "ok": true
+    },
+    {
+      "id": "good_020",
+      "ok": true
+    },
+    {
+      "id": "bad_001",
+      "ok": true
+    },
+    {
+      "id": "bad_002",
+      "ok": true
+    },
+    {
+      "id": "bad_003",
+      "ok": true
+    },
+    {
+      "id": "bad_004",
+      "ok": true
+    },
+    {
+      "id": "bad_005",
+      "ok": true
+    },
+    {
+      "id": "bad_006",
+      "ok": true
+    },
+    {
+      "id": "bad_007",
+      "ok": true
+    },
+    {
+      "id": "bad_008",
+      "ok": true
+    },
+    {
+      "id": "bad_009",
+      "ok": true
+    },
+    {
+      "id": "bad_010",
+      "ok": true
+    },
+    {
+      "id": "bad_011",
+      "ok": true
+    },
+    {
+      "id": "bad_012",
+      "ok": true
+    },
+    {
+      "id": "bad_013",
+      "ok": true
+    },
+    {
+      "id": "bad_014",
+      "ok": true
+    },
+    {
+      "id": "bad_015",
+      "ok": true
+    },
+    {
+      "id": "bad_016",
+      "ok": true
+    },
+    {
+      "id": "bad_017",
+      "ok": true
+    },
+    {
+      "id": "bad_018",
+      "ok": true
+    },
+    {
+      "id": "bad_019",
+      "ok": true
+    },
+    {
+      "id": "bad_020",
+      "ok": true
+    }
+  ],
+  "dccs": [
+    "maya",
+    "max",
+    "mobu",
+    "unreal"
+  ],
+  "failures": [],
+  "fixture_count": 40,
+  "generated_by": "validation/four_dcc_regression.py",
+  "ok": true,
+  "per_dcc": {
+    "max": {
+      "adapter_false_negatives": 0,
+      "adapter_false_positives": 0,
+      "adapter_gate": true,
+      "baseline_diffs": 0,
+      "capability_note": "",
+      "collection_errors": 0,
+      "contract_errors": 0,
+      "cross_dcc_diffs": 0,
+      "degraded": 0,
+      "false_negatives": 0,
+      "false_positives": 0,
+      "fixtures": 40,
+      "judgement_false_negatives": 0,
+      "judgement_false_positives": 0,
+      "ok": true
+    },
+    "maya": {
+      "adapter_false_negatives": 0,
+      "adapter_false_positives": 0,
+      "adapter_gate": true,
+      "baseline_diffs": 0,
+      "capability_note": "",
+      "collection_errors": 0,
+      "contract_errors": 0,
+      "cross_dcc_diffs": 0,
+      "degraded": 0,
+      "false_negatives": 0,
+      "false_positives": 0,
+      "fixtures": 40,
+      "judgement_false_negatives": 0,
+      "judgement_false_positives": 0,
+      "ok": true
+    },
+    "mobu": {
+      "adapter_false_negatives": 0,
+      "adapter_false_positives": 0,
+      "adapter_gate": true,
+      "baseline_diffs": 0,
+      "capability_note": "",
+      "collection_errors": 0,
+      "contract_errors": 0,
+      "cross_dcc_diffs": 0,
+      "degraded": 0,
+      "false_negatives": 0,
+      "false_positives": 0,
+      "fixtures": 40,
+      "judgement_false_negatives": 0,
+      "judgement_false_positives": 0,
+      "ok": true
+    },
+    "unreal": {
+      "adapter_false_negatives": 17,
+      "adapter_false_positives": 0,
+      "adapter_gate": false,
+      "baseline_diffs": 0,
+      "capability_note": "UE 不暴露 scale/rotate/namespace/depth 与 bind 变换，只比对骨骼层级与资产",
+      "collection_errors": 0,
+      "contract_errors": 0,
+      "cross_dcc_diffs": 0,
+      "degraded": 0,
+      "false_negatives": 0,
+      "false_positives": 0,
+      "fixtures": 40,
+      "judgement_false_negatives": 0,
+      "judgement_false_positives": 0,
+      "ok": true
+    }
+  },
+  "plugins": {
+    "ok": true,
+    "per_dcc": {
+      "max": {
+        "findings": 0,
+        "ok": true,
+        "passed": true,
+        "rule_ids": []
+      },
+      "maya": {
+        "findings": 0,
+        "ok": true,
+        "passed": true,
+        "rule_ids": []
+      },
+      "mobu": {
+        "findings": 0,
+        "ok": true,
+        "passed": true,
+        "rule_ids": []
+      },
+      "unreal": {
+        "findings": 1,
+        "ok": true,
+        "passed": true,
+        "rule_ids": [
+          "dcc.version_unsupported"
+        ]
+      }
+    }
+  },
+  "spec_version": "1.0.0"
+}

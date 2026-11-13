@@ -1,0 +1,10 @@
+{
+  "id": "defect_inspector",
+  "name": "VLM Defect Inspector 抽帧缺陷诊断",
+  "description": "对 Playblast / UE 录屏抽帧做缺陷候选诊断：AI 仅产出候选，经确定性过滤后输出需人工复核的帧号/类别/骨骼/置信度；离线可跑（离线降级为确定性候选），不写场景。",
+  "dcc": ["maya", "max", "mobu", "unreal"],
+  "min_version": { "maya": "2023", "max": "2023", "mobu": "2023", "unreal": "5.8" },
+  "entry": "defect_inspector",
+  "ui": "web",
+  "permissions": ["scene.read"]
+}

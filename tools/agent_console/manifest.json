@@ -1,0 +1,10 @@
+{
+  "id": "agent_console",
+  "name": "Agent Console 对话式控制台",
+  "description": "对话式技术美术助手：意图分类走确定性关键词路由，判定走规则引擎，AI 只做解释与参数化候选；修复计划必须经 ACTION_REGISTRY 白名单校验、dry-run 预览、权限授予与人工二次确认才写场景，执行器开启 undo 并在失败时整体回滚。chat 绝不写场景，LLM 绝不生成 DCC 脚本。",
+  "dcc": ["maya", "max", "mobu", "unreal"],
+  "min_version": { "maya": "2023", "max": "2023", "mobu": "2023", "unreal": "5.8" },
+  "entry": "agent_console",
+  "ui": "both",
+  "permissions": ["scene.read", "node.write"]
+}

@@ -6,6 +6,10 @@
 不会抛异常，也不影响 CI。
 """
 from .base import Capability, DCC, DCCAdapter, NullAdapter
+from .conformance import (capability_matrix, check_adapter,
+                          compare_snapshots,
+                          validate_snapshot as validate_conformance)
+from .snapshot_utils import build_snapshot, normalize_snapshot, write_sidecar
 
 
 def create_adapter(dcc: str, **kwargs):
@@ -28,4 +32,8 @@ def available_adapters() -> dict:
 
 
 __all__ = ["Capability", "DCC", "DCCAdapter", "NullAdapter",
-           "create_adapter", "available_adapters"]
+           "create_adapter", "available_adapters",
+           # 批次 3：四端一致性契约与共享快照工具
+           "capability_matrix", "check_adapter", "compare_snapshots",
+           "validate_conformance", "build_snapshot", "normalize_snapshot",
+           "write_sidecar"]

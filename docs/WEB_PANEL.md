@@ -228,8 +228,34 @@ python -m tak.adapters.unreal.commandlet --snapshot fixtures/bad/bad_001.json  -
 ## 6. 已知限制
 
 1. **无鉴权**：面板只绑定 `127.0.0.1`，任何能访问该端口的进程都能调 API 并运行工具。仅适用于本机开发/编辑场景。
-2. **工具清单依赖 `tools/`**：`tools/` 下目前只有 `_template`（以 `_` 开头会被跳过），因此默认 `/api/tools` 返回空列表，页面显示「暂无可用工具」空态。放一个真实插件目录即可出现。
+2. **工具清单依赖 `tools/`**：批次 2 起已有 5 个插件，批次 3 再增加 4 个（`agent_console` / `skeleton_mapper` / `defect_inspector` / `rig_kb`），`_template` 以 `_` 开头会被跳过；新增插件只要含合法 `manifest.json` 就会自动出现在页面，无需改框架。
 3. **快照只读**：面板的「快照体检」只做判定，绝不写回场景；写操作必须走 `tak.core.dsl` 的确认流程。
 4. **`/api/run` 无快照时**由适配器取当前场景；纯 Python 环境下降级为 `NullAdapter`，返回空快照结果。
 5. **headless 无法验证任何 GUI 交互**：菜单点击、内嵌浏览器渲染、主题切换、真实资产往返、ML Deformer 训练全部归入 W6–W30，必须由你实机验证。
 6. **UE 5.9 未安装**：所有 5.9 结论均为推断，必须经 W4 复验。
+
+---
+
+## 7. 批次 3：AI 工作台 API
+
+页面新增「AI 工作台」区块（四个页签），后端新增四个端点，全部只依赖 `tak.core` 的纯 Python 模块：
+
+| 端点 | 方法 | 请求 | 返回 | 安全边界 |
+|---|---|---|---|---|
+| `/api/agent` | POST | `{"action":"chat"\|"confirm"\|"history"\|"describe"\|"reset", "message":..., "session_id":"web", "snapshot":{...}, "plan_id":..., "confirm":bool, "dry_run":bool, "granted":[...]}` | `{"ok","action","session_id","result"}` | `chat` 绝不写场景；`confirm` 服务端强制二次校验：仅当 `confirm=true` + `dry_run=false` + `granted` 含白名单 `node.write` 时才可能执行，否则一律退化为 dry-run 预览。会话状态在进程内按 `session_id` 保存 |
+| `/api/knowledge` | GET / POST | `?q=权重归一化&top_k=3` 或 `{"query":...,"top_k":3}` | `{"ok","query","top_k","hits","count"}`，hits 含 doc_id/title/section/excerpt/citation | 本地离线倒排索引，不联网、不写缓存、结果可复现 |
+| `/api/vision` | POST | `{"frames":[{"frame":1,"image":"data:image/png;base64,..."}], "snapshot":{...}, "options":{}}` | `{"ok","result"}`，result 含 candidates / rejected / warnings / source | 帧号、类别、置信度、骨骼名由确定性校验过滤；离线标注 `deterministic_fallback`，不伪称模型识别 |
+| `/api/mapping` | POST | `{"source_bones":[...],"target_bones":[...],"options":{}}` | `{"ok","result"}`，result 含 entries / conflicts / unresolved / stats | 冲突保留供人工确认，不自动裁决；AI 候选只补词典未覆盖项 |
+
+`GET /api/health` 新增 `ai` 字段，逐项报告 `agent` / `knowledge` / `vision` / `mapping` 四个模块是否就绪；模块缺失时对应端点返回 **503** 与 JSON 错误，不会把 traceback 发给浏览器。
+
+复现（纯 Python，无需任何 DCC）：
+
+```bash
+python -m tak.ui.web.server --port 8765 --no-browser
+curl -s http://127.0.0.1:8765/api/health
+curl -s -X POST http://127.0.0.1:8765/api/agent -H "Content-Type: application/json" -d "{\"action\":\"chat\",\"message\":\"检查这个骨架\"}"
+curl -s "http://127.0.0.1:8765/api/knowledge?q=%E6%9D%83%E9%87%8D%E5%BD%92%E4%B8%80%E5%8C%96"
+```
+
+> W31–W34：AI 工作台四个页签在 Chrome / UE 内嵌浏览器中的真实交互（含深浅主题、错误提示、会话保持、确认执行按钮）需要用户复验，headless 回归只覆盖 `handle_api` 的纯函数路径。

@@ -258,3 +258,38 @@
 .tak-tool-list::-webkit-scrollbar-track { background: var(--tak-bg); border-radius: var(--tak-radius-sm); }
 .tak-tool-list::-webkit-scrollbar-thumb { background: var(--tak-border-strong); border-radius: var(--tak-radius-sm); }
 .tak-tool-list::-webkit-scrollbar-thumb:hover { background: var(--tak-accent); }
+
+/* ── 批次 3：AI 工作台 ────────────────────────────────────────────── */
+.tak-ai-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--tak-space-sm);
+    margin: 0 0 var(--tak-space-md);
+    padding-bottom: var(--tak-space-sm);
+    border-bottom: 1px solid var(--tak-border);
+}
+.tak-ai-tab.is-active {
+    border-color: var(--tak-accent);
+    color: var(--tak-accent);
+    background: var(--tak-accent-soft);
+}
+.tak-ai-pane > .tak-field,
+.tak-ai-pane > .tak-textarea { margin-bottom: var(--tak-space-sm); }
+.tak-ai-pane .tak-controls { margin-bottom: var(--tak-space-sm); }
+.tak-ai-output {
+    margin: 0;
+    padding: var(--tak-space-md);
+    max-height: 280px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--tak-mono);
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--tak-text);
+    background: var(--tak-elevated);
+    border: 1px solid var(--tak-border);
+    border-radius: var(--tak-radius-md);
+}
+.tak-ai-output::-webkit-scrollbar { width: 8px; }
+.tak-ai-output::-webkit-scrollbar-thumb { background: var(--tak-border-strong); border-radius: var(--tak-radius-sm); }

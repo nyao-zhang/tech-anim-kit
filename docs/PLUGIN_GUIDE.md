@@ -133,4 +133,32 @@ print(result.passed, result.render("md"))
 - 需要「内置规则 + 插件规则」一起跑时，参考 `rig_health_guard` 的 `options["include_builtin"]` 做法：默认隔离便于单测，UI/钩子传 `True` 开完整体检。
 - 插件自带 `test_core.py` 需**显式运行**（`python -m pytest tools/<id>/test_core.py -q`）：多个插件同名文件在 pytest 默认 import 模式下会冲突，且插件自测与 `tests/` 主回归共用全局 `RULE_REGISTRY`，混跑会造成状态耦合。CI 的主回归入口固定为 `tests/`。
 
-仓库内已有的五个插件（`rig_health_guard` / `spec_enforcer` / `export_bridge` / `ue_import_guard` / `ik_retarget_guard`）就是完整范例，新工具建议直接复制其中一个的结构。
+仓库内已有的九个插件（`rig_health_guard` / `spec_enforcer` / `export_bridge` / `ue_import_guard` / `ik_retarget_guard` / `agent_console` / `skeleton_mapper` / `defect_inspector` / `rig_kb`）就是完整范例，新工具建议直接复制其中一个的结构。纯规则型插件抄 `rig_health_guard`，AI 型插件抄 `skeleton_mapper`（只读候选）或 `agent_console`（受控写入）。
+
+## 10. 批次 3：AI 工具插件与四端适配器约定
+
+批次 3 新增四个插件：`agent_console`（对话候选）、`skeleton_mapper`（骨骼语义映射）、`defect_inspector`（VLM 抽帧诊断）、`rig_kb`（绑定知识库 RAG）。它们与批次 2 插件共享 `run_report(ctx)` 契约，但有几条额外约定：
+
+1. **不注册全局 `@rule`**：这四个工具的判定是「工具内部的一次性分析」，不是可复用的场景规范。若注册进全局 `RULE_REGISTRY`，40 个 golden fixtures 的「全部已注册规则」回归会被污染。因此判定写成 `tak/core/<domain>/` 里的纯函数，插件 `core.py` 直接构造 `Finding` 与 `Report`。
+2. **AI 只产出候选**：`tak.core.ai.providers.get_provider()` 默认离线；真实模型返回的结构化 JSON 必须解析后经确定性校验（帧号/类别/骨骼白名单、映射目标存在性、DSL 动作白名单）才能进入结果。解析失败一律降级并标注 `source`，绝不伪称模型判定。
+3. **写入唯一入口仍是 DSL**：`agent_console` 的 `chat()` 绝不写场景；`confirm()` 默认 dry-run，必须 `confirm=True` + `dry_run=False` + 授权 `node.write` 才调用 `ACTION_REGISTRY.execute`。Web 服务端在 `/api/agent` 又收窄了一次权限白名单。
+4. **可复现**：不写时间戳、不写随机数、排序键固定；`knowledge/` 的检索是本地倒排索引，不联网、不写缓存。
+5. **UI 片段契约**：Web 侧 `render_panel_html(result)` / `render_report_html(result)`，Qt 侧 `show(dcc, omui)`；颜色只用 `var(--tak-*)`，HTML 必须 `html.escape`、无 CDN/外链。
+
+新增 DCC 适配器（3ds Max / MotionBuilder）请复用 `tak/adapters/snapshot_utils.py` 的纯函数产出 `SkeletonSnapshot` 兼容字典，并用 `tak/adapters/conformance.py` 的 `validate_snapshot` / `compare_snapshots` / `check_adapter` 自检：
+
+```python
+from tak.adapters.snapshot_utils import build_snapshot, write_sidecar
+from tak.adapters.conformance import check_adapter, validate_snapshot
+
+snapshot = build_snapshot(dcc="max", source="tak.adapters.max", joints=joints, skin=skin)
+assert validate_snapshot(snapshot)["ok"]
+assert check_adapter(adapter)["ok"]       # 能力、DCC 标识、结构一体检
+```
+
+`validation/four_dcc_regression.py` 会在四套 mock 上跑 40 个 fixtures，逐项比对结构、基线读数、跨端 diff 与规范判定；CI 里这一步是硬门槛。新增适配器或改动快照字段后，先跑：
+
+```bash
+python validation/four_dcc_regression.py --quick
+python validation/four_dcc_regression.py
+```

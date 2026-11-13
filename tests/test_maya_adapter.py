@@ -276,10 +276,13 @@ def test_create_adapter_forwards_kwargs(no_maya):
     assert adapter.version == "2024"
     assert adapter.python_version == "3.10"
     capabilities = {item for item in Capability if adapter.supports(item)}
+    # P4.4 起 MayaAdapter 补齐了四个真实写方法，能力声明随之扩展；
+    # spec_enforcer 的 DSL 动作因此不再是安全 no-op。
     assert capabilities == {
         Capability.SCENE_QUERY, Capability.SKIN_QUERY,
         Capability.SKELETON_SNAPSHOT, Capability.FBX_EXPORT,
         Capability.UNDO_SCOPE, Capability.UI_HOST,
+        Capability.NODE_WRITE, Capability.WEIGHT_WRITE,
     }
 
 
