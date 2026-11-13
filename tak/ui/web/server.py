@@ -39,7 +39,7 @@ import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Iterable, List, Optional, Tuple
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from tak.core import runner
 from tak.version import __version__
@@ -396,6 +396,50 @@ def _api_mapping(body: Any) -> Dict[str, Any]:
     return {"ok": True, "result": result}
 
 
+def _api_motion(body: Any) -> Dict[str, Any]:
+    """动作资产语义检索：只读、离线、确定性排序。
+
+    ``query`` 为空表示「列出全部」，此时仍按 clip_id 升序返回，方便 UI 直接浏览。
+    ``options.filters`` 是**硬过滤**（不满足直接排除，不是降权），因此服务端
+    在这里把类型收窄一次，避免把非法过滤值透传给内核。
+    """
+    try:
+        from tak.core.motion import MotionLibrary
+    except Exception as exc:
+        raise ApiError(503, "动作检索模块未就绪: %s: %s"
+                       % (type(exc).__name__, exc))
+    data = _parse_body(body)
+    query = data.get("query")
+    query = "" if query is None else str(query)
+    try:
+        top_k = max(1, min(20, int(data.get("top_k") or 8)))
+    except (TypeError, ValueError):
+        raise ApiError(400, "top_k 必须是 1-20 的整数")
+    options = data.get("options") if isinstance(data.get("options"), dict) else {}
+    filters = options.get("filters")
+    filters = dict(filters) if isinstance(filters, dict) else {}
+    for key in ("min_duration", "max_duration", "min_fps"):
+        if key in filters:
+            try:
+                filters[key] = float(filters[key])
+            except (TypeError, ValueError):
+                filters.pop(key, None)
+    for key in ("loopable", "root_motion"):
+        if key in filters:
+            filters[key] = bool(filters[key])
+    cleaned = {"filters": filters}
+    motion_type = options.get("motion_type")
+    if isinstance(motion_type, str) and motion_type.strip():
+        cleaned["motion_type"] = motion_type.strip().lower()
+    library = MotionLibrary()
+    hits = library.search(query, top_k=top_k, options=cleaned)
+    return {"ok": True, "query": query, "top_k": top_k, "count": len(hits),
+            "hits": hits, "stats": library.describe(),
+            "warning": ("" if hits else "未命中任何动作；可清空关键词列出全部，"
+                                        "或放宽时长 / 循环 / 根位移筛选")}
+
+
+
 def handle_api(method: str, path: str, body: Any = None,
                query: Optional[Dict[str, Any]] = None,
                repo_root: Optional[str] = None) -> Tuple[int, Dict[str, Any]]:
@@ -451,6 +495,10 @@ def handle_api(method: str, path: str, body: Any = None,
             if method != "POST":
                 raise ApiError(405, "该接口只接受 POST")
             return 200, _api_mapping(body)
+        if route == "/api/motion":
+            if method != "POST":
+                raise ApiError(405, "该接口只接受 POST")
+            return 200, _api_motion(body)
         raise ApiError(404, "未知接口: %s" % route)
     except ApiError as exc:
         return exc.status, {"ok": False, "error": exc.message}
@@ -578,6 +626,76 @@ def panel_url(host: str, port: int) -> str:
     if host in ("0.0.0.0", "::", ""):
         host = DEFAULT_HOST
     return "%s://%s:%d/" % (HTTP_SCHEME, host, int(port))
+
+
+# 进程内单例：Maya / Max / MoBu 的菜单项可能在一次会话里被点很多次，
+# 每次都起一个新服务器会撞端口、泄漏线程。这里只保留一份。
+_PANEL_LOCK = threading.Lock()
+_PANEL_STATE: Dict[str, Any] = {"httpd": None, "thread": None, "url": ""}
+
+
+def serve_in_thread(host: str = DEFAULT_HOST, port: int = 0,
+                    ue: bool = False, repo_root: Optional[str] = None,
+                    tab: str = "") -> Dict[str, Any]:
+    """在后台线程启动面板，立即返回地址（供 DCC 菜单项调用）。
+
+    与 :func:`serve` 的区别：不阻塞、可重复调用。第二次及以后的调用直接复用
+    已启动的服务器，只把地址返回 —— 否则用户连点两次菜单就会有两个进程内
+    HTTP 服务抢同一个端口。
+
+    :param port: 端口；``0`` 表示由系统分配空闲端口（默认，最不容易冲突）。
+    :param tab: 可选的目标页签，作为 ``?tab=`` 查询参数带在地址上，前端会据此
+        激活对应面板（例如 ``motion`` / ``kb``）。
+    :returns: ``{"ok": True, "url": "...", "port": n, "reused": bool}``；
+        启动失败时 ``{"ok": False, "reason": "..."}``，不抛异常。
+    """
+    global _PANEL_STATE
+    bind_host = DEFAULT_HOST if ue else (host or DEFAULT_HOST)
+    with _PANEL_LOCK:
+        existing = _PANEL_STATE.get("httpd")
+        if existing is not None:
+            url = str(_PANEL_STATE.get("url") or "")
+            return {"ok": True, "url": _with_tab(url, tab),
+                    "port": int(existing.server_address[1]), "reused": True}
+        try:
+            httpd = create_server(host=bind_host, port=int(port),
+                                  repo_root=repo_root)
+        except Exception as exc:
+            return {"ok": False, "reason": "%s: %s"
+                    % (type(exc).__name__, exc)}
+        real_port = int(httpd.server_address[1])
+        url = panel_url(bind_host, real_port)
+        thread = threading.Thread(target=httpd.serve_forever,
+                                  name="tak-web-panel", daemon=True)
+        thread.start()
+        _PANEL_STATE = {"httpd": httpd, "thread": thread, "url": url}
+        print("[TAK][web] 面板已在后台启动: %s" % url)
+        return {"ok": True, "url": _with_tab(url, tab), "port": real_port,
+                "reused": False}
+
+
+def stop_panel() -> Dict[str, Any]:
+    """停止后台面板（供 DCC 退出钩子调用）；没有在跑时安全返回。"""
+    global _PANEL_STATE
+    with _PANEL_LOCK:
+        httpd = _PANEL_STATE.get("httpd")
+        if httpd is None:
+            return {"ok": True, "stopped": False}
+        try:
+            httpd.shutdown()
+            httpd.server_close()
+        except Exception as exc:
+            return {"ok": False, "reason": "%s: %s"
+                    % (type(exc).__name__, exc)}
+        _PANEL_STATE = {"httpd": None, "thread": None, "url": ""}
+        return {"ok": True, "stopped": True}
+
+
+def _with_tab(url: str, tab: str) -> str:
+    tab = str(tab or "").strip()
+    if not tab or not url:
+        return url
+    return "%s?tab=%s" % (url, quote(tab, safe=""))
 
 
 def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,

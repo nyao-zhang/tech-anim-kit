@@ -165,6 +165,13 @@
     border-top: 1px solid var(--tak-border);
 }
 .tak-field { display: flex; flex-direction: column; gap: 4px; min-width: 160px; }
+.tak-field-inline {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+.tak-field-inline > input[type="checkbox"] { margin: 0; }
 .tak-field-label { font-size: 12px; color: var(--tak-text-muted); }
 .tak-control-actions { display: flex; gap: var(--tak-space-sm); align-items: center; }
 

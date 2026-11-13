@@ -219,3 +219,108 @@ def test_panel_has_ai_workbench_and_offline_only():
         script = fh.read()
     for route in ("/api/agent", "/api/knowledge", "/api/vision", "/api/mapping"):
         assert route in script
+
+
+# --------------------------------------------------------------------------- #
+# P6.1：动作检索 /api/motion 与进程内面板
+# --------------------------------------------------------------------------- #
+class FakeMotion:
+    # 服务端每次请求都 new 一个实例，因此记录必须挂在类上才能被断言看到。
+    RECORDS = []
+
+    def __init__(self):
+        self.calls = FakeMotion.RECORDS
+
+    def search(self, query, top_k=5, options=None):
+        self.calls.append((query, top_k, dict(options or {})))
+        return [{"clip_id": "walk_fwd_01", "name": "走路 前进", "score": 9.5,
+                 "motion_type": "walk", "duration": 1.0, "rank": 1}]
+
+    def describe(self):
+        return {"contract": "1.0", "clip_count": 12, "offline": True}
+
+
+@pytest.fixture()
+def fake_motion(monkeypatch):
+    FakeMotion.RECORDS = []
+    module = ModuleType("tak.core.motion")
+    module.MotionLibrary = FakeMotion
+    monkeypatch.setitem(sys.modules, "tak.core.motion", module)
+    return module
+
+
+def test_motion_endpoint_returns_hits(fake_motion):
+    status, payload = server.handle_api("POST", "/api/motion", body={
+        "query": "走路", "top_k": 5, "options": {"motion_type": "Walk"}})
+    assert status == 200
+    assert payload["count"] == 1
+    assert payload["hits"][0]["clip_id"] == "walk_fwd_01"
+    assert payload["stats"]["clip_count"] == 12
+    # 类型被规范化成小写后再透传，避免内核要处理大小写变体
+    options = FakeMotion.RECORDS[0][2]
+    assert options["motion_type"] == "walk"
+
+
+def test_motion_endpoint_empty_query_lists_all(fake_motion):
+    status, payload = server.handle_api("POST", "/api/motion", body={})
+    assert status == 200
+    assert payload["query"] == ""
+    assert payload["top_k"] == 8
+
+
+def test_motion_endpoint_filters_are_numeric(fake_motion):
+    status, _ = server.handle_api("POST", "/api/motion", body={
+        "query": "run",
+        "options": {"filters": {"min_duration": "0.8", "max_duration": None,
+                                "loopable": 1, "bogus": "x"}}})
+    assert status == 200
+    filters = FakeMotion.RECORDS[0][2]["filters"]
+    assert filters["min_duration"] == 0.8
+    assert isinstance(filters["min_duration"], float)
+    assert filters["loopable"] is True
+    assert "max_duration" not in filters      # 非法值被丢弃而不是变成 0
+
+
+def test_motion_endpoint_rejects_bad_top_k(fake_motion):
+    status, payload = server.handle_api("POST", "/api/motion", body={"top_k": "abc"})
+    assert status == 400 and payload["ok"] is False
+
+
+def test_motion_endpoint_get_is_405(fake_motion):
+    status, payload = server.handle_api("GET", "/api/motion")
+    assert status == 405 and payload["ok"] is False
+
+
+def test_motion_endpoint_without_module_degrades(monkeypatch):
+    monkeypatch.setitem(sys.modules, "tak.core.motion", None)
+    status, payload = server.handle_api("POST", "/api/motion", body={"query": "x"})
+    assert status == 503
+    assert "动作检索模块未就绪" in payload["error"]
+
+
+def test_panel_has_motion_tab():
+    with open(os.path.join(ROOT, "tak", "ui", "web", "panel.html"),
+              "r", encoding="utf-8") as fh:
+        html = fh.read()
+    assert 'data-tab="motion"' in html
+    assert 'id="motionRunBtn"' in html
+    assert 'id="motionOutput"' in html
+    with open(os.path.join(ROOT, "tak", "ui", "web", "app.js"),
+              "r", encoding="utf-8") as fh:
+        script = fh.read()
+    assert "/api/motion" in script
+    # 深链：DCC 菜单把用户直接送到某个页签
+    assert 'params.get("tab")' in script
+
+
+def test_serve_in_thread_is_reused_and_stoppable():
+    first = server.serve_in_thread(port=0)
+    try:
+        assert first["ok"] is True and first["reused"] is False
+        second = server.serve_in_thread(port=0, tab="motion")
+        assert second["reused"] is True
+        assert second["port"] == first["port"]
+        assert second["url"].endswith("?tab=motion")
+    finally:
+        assert server.stop_panel()["stopped"] is True
+    assert server.stop_panel()["stopped"] is False

@@ -1,0 +1,10 @@
+{
+  "id": "mldeformer_factory",
+  "name": "ML Deformer 数据工厂",
+  "description": "把骨架快照转成确定性的 ML Deformer 姿态采样计划与内容寻址的数据清单，并按质量门槛（pose 总数、每关节覆盖、重复率、类别完整性、契约一致性）出报告。只产出数据集与门槛结论，不调用任何训练入口——UE 侧 MLDeformerAsset / NeuralMorphModel / DeformerGraphAsset 在 5.7 与 5.8 的 Python 侧均未暴露，能力位 mldeformer.train 恒为 false。零第三方依赖、零 DCC import，同一输入两次运行的清单逐字节相同。",
+  "dcc": ["maya", "max", "mobu", "unreal"],
+  "min_version": { "maya": "2023", "max": "2023", "mobu": "2023", "unreal": "5.8" },
+  "entry": "mldeformer_factory",
+  "ui": "both",
+  "permissions": ["scene.read"]
+}

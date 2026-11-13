@@ -162,3 +162,107 @@ assert check_adapter(adapter)["ok"]       # 能力、DCC 标识、结构一体�
 python validation/four_dcc_regression.py --quick
 python validation/four_dcc_regression.py
 ```
+
+## 11. 批次 4：只读型 AI 插件、确定性与安装器
+
+批次 4 加了三个插件（`motion_library` / `mldeformer_factory`）和一套安装器。它们引入了三条新的约定，新工具请照抄。
+
+### 11.1 「只读型 AI 插件」的标准结构
+
+`motion_library` 与 `mldeformer_factory` 都不注册 `@rule`、不写场景、不联网。它们的 `manifest.json` 里**没有 `rules` 字段**，`tests/test_release_meta.py::test_ai_plugins_do_not_register_global_rules` 会拦住手滑加回去的人。
+
+为什么这条重要：插件规则一旦注册进全局 `RULE_REGISTRY`，就会参与 40 个 golden fixtures 的判定。AI 插件的规则本该是「候选」，一旦混进判定链，fixtures 的漏报/误报基线立刻失真。
+
+标准结构：
+
+```
+tools/<id>/
+├── manifest.json     # id/name/description/dcc/min_version/entry/ui/permissions，无 rules
+├── core.py           # TOOL_ID + info() + 纯函数 API + run_report(ctx)
+├── ui_web.py         # 返回纯数据，不含 HTML 外链、不含 <script>
+└── ui_qt.py          # 无 Qt 时必须返回 None，不得抛异常
+```
+
+`core.py` 的三段式：
+
+```python
+TOOL_ID = "<id>"                       # 必须与目录名一致（有测试拦）
+
+def info() -> dict:                    # 自描述，给面板/菜单用
+    ...
+
+def some_query(...) -> dict:           # 薄封装，返回 json.dumps 安全的 dict
+    ...
+
+def run_report(ctx) -> Report:         # 把结果转成统一 Report
+    ...
+    report.metadata.update({
+        "results": ..., "stats": ...,
+        "safety": {"read_only": True, "scene_write": False,
+                   "network": False, "deterministic": True, "note": "..."},
+    })
+```
+
+`safety` 不是装饰：Web API 会把它原样透给前端，UI 据此决定是否显示「只读」标记。写了 `scene_write: False` 却真的改场景，比不写更糟。
+
+### 11.2 确定性是硬要求，不是「尽量」
+
+只要插件输出可能被当作基线（数据集清单、检索排名、映射结果），就必须满足：
+
+1. **排序键完整**。只按 score 排不够 —— 同分时顺序取决于字典插入序，换个 Python 版本就变了。至少补一个稳定 tie-break（`clip_id` 升序 / `pose_id` 升序）。
+2. **随机只准用局部实例**。`random.Random(seed)`，不要碰全局 `random`。全局状态会被别的库污染，也会污染别人。
+3. **不写时间戳、不写绝对路径进摘要**。它们会让「同样的输入」产出「不同的哈希」，内容寻址直接失效。
+4. **哈希用规范化 JSON**：`json.dumps(payload, sort_keys=True, separators=(",", ":"))` 再 `sha256`。`sort_keys` 少了，键序变化就会改哈希。
+
+自检方式（`mldeformer` 就是这么验证的）：
+
+```python
+a = build_manifest(build_plan(snapshot))
+b = build_manifest(build_plan(snapshot))
+assert a["version"] == b["version"]           # 同进程两次
+
+# 再换 PYTHONHASHSEED 起两个进程比一次，防字典序依赖
+```
+
+### 11.3 安装器：只准动自己的标记块
+
+`tak/install` 的写入模型是**标记块**，不是「生成整份配置文件」：
+
+```
+# >>> TAK BEGIN maya v0.3.0
+...生成的内容（块外内容不受影响）...
+# >>> TAK END maya
+```
+
+四条不可协商的约束：
+
+| 约束 | 原因 |
+|---|---|
+| 默认 `dry_run=True` | 装启动脚本是不可逆操作里最容易翻车的一类：用户 `userSetup.py` 里可能有一年的积累 |
+| 写前备份 `<file>.tak-backup-<N>`，N 递增不覆盖 | 用户可能装过好几个版本，最早的备份才是「原始状态」 |
+| 块外逐字节不动 | 包括行尾、末尾换行、BOM |
+| 卸载精确删块并还原块外内容 | 不是「还原备份」（备份是安装后的状态，不是安装前的） |
+
+新增一个 DCC 目标时，在 `tak/install/targets.py` 的 `TARGETS` 里加一项，必须提供：`id`、`default_roots`、`entry_file`、`block_template`、`comment_style`、`notes`。`block_template` 里的代码必须**自包含、可重复执行无副作用**，且每一段都要 `try/except` 兜住 —— 一个菜单注册失败不该让用户的整个启动脚本崩掉。
+
+`tests/test_installer.py` 里有几条必须照着写的测试：
+
+- `plan_install(dry_run=True)` 期间 `builtins.open` 不得以写模式被调用（用 monkeypatch 计数）。
+- 连跑两次 `apply`，第二次全部 `skip`，文件逐字节相同。
+- 块外手写的用户代码安装后逐字节不变。
+- 安装 → 卸载后文件内容与安装前完全一致。
+
+### 11.4 DCC 菜单模块的统一契约
+
+四端各有一个 `tak/adapters/<dcc>/menu.py`，函数签名保持一致：
+
+```python
+register_menu() -> {"ok": bool, "menu": str, "reason"?: str}
+unregister_menu() -> {"ok": bool, "menu": str, "removed"?: bool}
+```
+
+**不抛异常**是硬要求：这些函数由 `userSetup.py` 在启动时调用，抛出去会让 Maya 静默丢失后续所有启动项。无宿主时返回 `{"ok": False, "reason": "maya.cmds 不可用（无 Maya 宿主）"}`，让调用方能打印出人话。
+
+Maya 侧的 `register_menu()` 必须**幂等**：`cmds.menu` 不查重，反复执行 `userSetup` 会堆出多个同名菜单。做法是先 `menu -exists` 判断再 `deleteUI`，然后重建。
+
+`docs/VALIDATION.md` 的 B21–B23 是这一层的真机验证项 —— mock 测不出「菜单到底有没有出现在 Maya 菜单栏上」。

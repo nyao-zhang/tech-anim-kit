@@ -129,6 +129,7 @@
         <button class="tak-btn tak-ai-tab" type="button" data-tab="kb" aria-selected="false">知识库</button>
         <button class="tak-btn tak-ai-tab" type="button" data-tab="vision" aria-selected="false">抽帧诊断</button>
         <button class="tak-btn tak-ai-tab" type="button" data-tab="mapping" aria-selected="false">骨骼映射</button>
+        <button class="tak-btn tak-ai-tab" type="button" data-tab="motion" aria-selected="false">动作检索</button>
       </div>
 
       <div class="tak-ai-pane" data-pane="chat">
@@ -190,6 +191,53 @@
           <span class="tak-hint">冲突项保留给人工确认，不会自动裁决。</span>
         </div>
         <pre id="mappingOutput" class="tak-ai-output">尚未映射。</pre>
+      </div>
+
+      <div class="tak-ai-pane" data-pane="motion" hidden>
+        <label class="tak-field">
+          <span class="tak-field-label">检索动作资产</span>
+          <input id="motionInput" class="tak-input" type="search"
+                 placeholder="例如：走路 循环 / run loop / 受击 短促 / 转身" autocomplete="off">
+        </label>
+        <div class="tak-controls">
+          <label class="tak-field">
+            <span class="tak-field-label">类型</span>
+            <select id="motionType" class="tak-select">
+              <option value="">不限</option>
+              <option value="idle">待机 idle</option>
+              <option value="walk">走路 walk</option>
+              <option value="run">跑步 run</option>
+              <option value="jump">跳跃 jump</option>
+              <option value="attack">攻击 attack</option>
+              <option value="hit">受击 hit</option>
+              <option value="turn">转身 turn</option>
+              <option value="crouch">蹲伏 crouch</option>
+            </select>
+          </label>
+          <label class="tak-field">
+            <span class="tak-field-label">最短时长(s)</span>
+            <input id="motionMinDur" class="tak-input" type="number" min="0" step="0.1" placeholder="0">
+          </label>
+          <label class="tak-field">
+            <span class="tak-field-label">最长时长(s)</span>
+            <input id="motionMaxDur" class="tak-input" type="number" min="0" step="0.1" placeholder="不限">
+          </label>
+        </div>
+        <div class="tak-controls">
+          <label class="tak-field tak-field-inline">
+            <input id="motionLoopable" type="checkbox">
+            <span class="tak-field-label">只要可循环</span>
+          </label>
+          <label class="tak-field tak-field-inline">
+            <input id="motionRootMotion" type="checkbox">
+            <span class="tak-field-label">只要含根位移</span>
+          </label>
+          <div class="tak-control-actions">
+            <button id="motionRunBtn" class="tak-btn tak-btn-primary" type="button">检索</button>
+            <button id="motionAllBtn" class="tak-btn" type="button">列出全部</button>
+          </div>
+        </div>
+        <pre id="motionOutput" class="tak-ai-output">输入关键词或直接列出全部动作。</pre>
       </div>
     </section>
 

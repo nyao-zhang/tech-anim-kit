@@ -33,6 +33,31 @@ jobs:
         run: python tools/new_tool.py --list
       - name: Four-DCC conformance regression (40 golden fixtures)
         run: python validation/four_dcc_regression.py --out validation/four_dcc_ci.json
+      - name: Installer is discoverable and dry-run only
+        run: |
+          python -m tak.install --list --json > /dev/null
+          # --plan 是默认行为（dry_run=True）：这一步必须保证磁盘零改动，
+          # 否则 CI 会在 runner 的用户目录里写启动脚本。
+          python -m tak.install --plan --json > /dev/null
+      - name: Motion library and dataset factory are DCC-free
+        run: |
+          python - <<'PY'
+          import json, glob
+          from tak.core.motion import MotionLibrary
+          from tak.core.mldeformer import build_plan, build_manifest
+
+          lib = MotionLibrary()
+          assert lib.search("走路 循环", top_k=3), "动作检索无结果"
+          assert lib.search("") , "空查询未列出全部"
+
+          snap = json.load(open(sorted(glob.glob("fixtures/good/*.json"))[0],
+                                encoding="utf-8"))["snapshot"]
+          a = build_manifest(build_plan(snap))
+          b = build_manifest(build_plan(snap))
+          assert a["version"] == b["version"], "数据集清单不可复现"
+          print("OK: motion %d clips / mld %d poses %s"
+                % (lib.describe()["clip_count"], a["pose_count"], a["version"]))
+          PY
       - name: Python 3.9 syntax scan (all shipped code)
         run: |
           python - <<'PY'

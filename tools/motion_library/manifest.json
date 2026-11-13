@@ -1,0 +1,10 @@
+{
+  "id": "motion_library",
+  "name": "动作库语义检索",
+  "description": "本地离线动作资产检索：对 MotionClip 元数据（名称 / 标签 / 骨骼 / 数值特征）做确定性 BM25 文本分、动作类型加权（走 / 跑 / 跳 / 攻击 / 受击 / 转身 / 蹲伏 / 攀爬 / 舞蹈 / 死亡 / 待机 / 其它）与数值过滤（时长 / 循环 / 根运动 / 骨骼 / 帧率），返回带 clip_id 与中文匹配理由的命中列表，供 Agent Console 注入上下文与 Web 面板渲染。全程只读、离线、零第三方依赖、零 DCC import；不解析 FBX 二进制、不写场景、不联网、不写缓存文件；AI 只做语义重排候选，判定与排序由确定性代码给出，结果完全可复现。",
+  "dcc": ["maya", "max", "mobu", "unreal"],
+  "min_version": { "maya": "2023", "max": "2023", "mobu": "2023", "unreal": "5.8" },
+  "entry": "motion_library",
+  "ui": "web",
+  "permissions": ["scene.read"]
+}

@@ -96,3 +96,19 @@ python tools/new_tool.py --list
 
 回填格式：`B11 ✅ 3dsMax2025 / Python3.11 / 备注：…`。
 所有真机结论都以本机实测证据为准；离线 mock 与 CI 的 PASS **不能替代**上述项目。
+
+## F. 批次 4 新增复验清单（P6）
+
+批次 4 的能力全部先在 `tmp_path` / 离线确定性路径上回归（见 `docs/BATCH4_REPORT.md`）。下面这些必须落在真实宿主或真实目录上，仍需逐项复验。
+
+| # | 环境 | 步骤 | 通过标准 |
+|---|---|---|---|
+| B21 | **Maya 2023+ 安装 + 菜单** | `python -m tak.install --apply --dcc maya`，重启 Maya；再执行 `from tak.adapters.maya.menu import register_menu; print(register_menu())` | 菜单栏出现 `TAK / Tech Anim Kit`；六个菜单项可点；重复执行 `register_menu()` **不产生重复菜单**；`unregister_menu()` 后菜单消失 |
+| B22 | **Max / MoBu 安装 + 菜单** | 同上换 `--dcc max` / `--dcc mobu`；Max 看 `scripts/startup`，MoBu 看 `config/PythonStartup` | 菜单出现；Max 的块是 `--` 注释风格且 `python.Execute` 真被执行；MoBu 启动无报错 |
+| B23 | **UE 安装** | `python -m tak.install --apply --dcc unreal --root unreal=<项目>/Content/Python`，重启编辑器 | `init_unreal.py` 里出现 TAK 块；UE 输出日志有 `[TAK]` 行；删掉块后重启无残留 |
+| B24 | **卸载可逆** | 安装前 `sha256sum` 目标文件，`--apply` 后再 `--uninstall --apply`，再算一次 | 哈希与安装前**完全一致**（含末尾换行）；备份文件 `<file>.tak-backup-1` 存在且内容等于安装后版本 |
+| B25 | **动作检索真实资产** | 用真实动作库（FBX + 同名 `.motion.json` sidecar）跑 `MotionLibrary.from_index()` / `scan_directory()`，检索「跑步 循环」「受击 短促」 | 命中符合肉眼判断；`features["estimated"]` 在无 sidecar 时为 1.0；同一 query 两次结果完全一致；`?tab=motion` 深链能直接打开页签 |
+| B26 | **数据集工厂真实骨架** | 用**生产骨架**（非 fixture）跑 `build_plan` → `build_manifest` → `validate_manifest`，把 `manifest.json` 交给动画组评审 | 采样覆盖每个形变关节；极值角度不穿模（人工判定）；门槛无 ERROR；同一骨架两次生成 `version` 相同 |
+
+回填格式：`B21 ✅ Maya2023 / Win11 / 备注：…`。
+**注意**：B21–B24 会真的写用户目录。执行前先 `--plan` 看一眼，确认 `[create]` / `[append]` 的路径是你预期的那个；安装器只改自己的标记块，但路径选错仍然会写错地方。

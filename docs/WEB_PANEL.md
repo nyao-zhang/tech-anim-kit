@@ -40,7 +40,7 @@ python -m tak.ui.web.server --port 8765
 
 ```
 [TAK][web] 面板已启动: http://127.0.0.1:8765/
-[TAK][web] 版本 0.1.0 · DCC none
+[TAK][web] 版本 0.3.0 · DCC none
 ```
 
 默认会自动打开系统浏览器；`--no-browser` 可关闭。参数：
@@ -246,6 +246,7 @@ python -m tak.adapters.unreal.commandlet --snapshot fixtures/bad/bad_001.json  -
 | `/api/knowledge` | GET / POST | `?q=权重归一化&top_k=3` 或 `{"query":...,"top_k":3}` | `{"ok","query","top_k","hits","count"}`，hits 含 doc_id/title/section/excerpt/citation | 本地离线倒排索引，不联网、不写缓存、结果可复现 |
 | `/api/vision` | POST | `{"frames":[{"frame":1,"image":"data:image/png;base64,..."}], "snapshot":{...}, "options":{}}` | `{"ok","result"}`，result 含 candidates / rejected / warnings / source | 帧号、类别、置信度、骨骼名由确定性校验过滤；离线标注 `deterministic_fallback`，不伪称模型识别 |
 | `/api/mapping` | POST | `{"source_bones":[...],"target_bones":[...],"options":{}}` | `{"ok","result"}`，result 含 entries / conflicts / unresolved / stats | 冲突保留供人工确认，不自动裁决；AI 候选只补词典未覆盖项 |
+| `/api/motion` | POST | `{"query":"走路 循环","top_k":8,"options":{"motion_type":"walk","filters":{"min_duration":0.8,"loopable":true}}}` | `{"ok","count","hits","stats","warning"}`，hit 含 clip_id / name / score / text_score / type_score / motion_type / duration / loopable / bones / rank / matched_terms / why | `query` 为空表示列出全部；`filters` 是**硬过滤**（不满足直接排除，不是降权）；`min_duration`/`max_duration`/`min_fps` 强转 float，非法值丢弃而非当成 0 |
 
 `GET /api/health` 新增 `ai` 字段，逐项报告 `agent` / `knowledge` / `vision` / `mapping` 四个模块是否就绪；模块缺失时对应端点返回 **503** 与 JSON 错误，不会把 traceback 发给浏览器。
 
@@ -258,4 +259,6 @@ curl -s -X POST http://127.0.0.1:8765/api/agent -H "Content-Type: application/js
 curl -s "http://127.0.0.1:8765/api/knowledge?q=%E6%9D%83%E9%87%8D%E5%BD%92%E4%B8%80%E5%8C%96"
 ```
 
-> W31–W34：AI 工作台四个页签在 Chrome / UE 内嵌浏览器中的真实交互（含深浅主题、错误提示、会话保持、确认执行按钮）需要用户复验，headless 回归只覆盖 `handle_api` 的纯函数路径。
+> W31–W34：AI 工作台前四个页签在 Chrome / UE 内嵌浏览器中的真实交互（含深浅主题、错误提示、会话保持、确认执行按钮）需要用户复验，headless 回归只覆盖 `handle_api` 的纯函数路径。
+>
+> W35–W37（批次 4）：**动作检索页签**的真实交互与深链 `?tab=motion`、**进程内面板**（DCC 菜单点「Web 面板」不阻塞宿主、重复点击复用同一实例、退出时能停）、**安装后**从 DCC 菜单进入面板的完整链路。headless 只覆盖 `serve_in_thread` 的单例与地址拼接。
