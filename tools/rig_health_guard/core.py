@@ -91,6 +91,29 @@ def run_report(context: Any) -> Any:
     scope = None if include_builtin else TOOL_ID
     report = run_rules(context.rule_context(), title=TITLE, plugin_id=scope)
     report.metadata["scope"] = "all" if include_builtin else "plugin_only"
+
+    # 数据源缺失 ≠ 场景健康。9 条插件规则全部依赖 metadata["health"]，取不到就
+    # 整组跳过；若这里不发声，菜单点开会显示「通过 / 0 条结论」，而事实上一条
+    # 规则都没跑。用 INFO 而不是 WARNING：不改判定、不阻断流程，但让结论列表
+    # 里能看见「本次没检查」。
+    health_state = _health_state(getattr(context, "snapshot", None))
+    if not health_state["present"]:
+        from tak.core.rules.base import Finding, Severity
+
+        if include_builtin:
+            _message = ("当前快照未提供 metadata.health，体检专项规则未执行"
+                        "（内置规范规则已跑）；场景层面的问题不会被发现。")
+        else:
+            _message = ("当前快照未提供 metadata.health，本次未执行体检规则；"
+                        "结论为空并不代表场景健康。")
+        report.findings.append(Finding(
+            rule_id=TOOL_ID + ".datasource.missing",
+            severity=Severity.INFO,
+            message=_message,
+            fix_hint="由适配器在采集阶段补充 health 数据，或改用 "
+                     "tak.core.runner.evaluate() 走内置规范规则。",
+            data={"health_section": health_state, "scope": report.metadata["scope"]},
+        ))
     findings = list(report.findings)
 
     explanations, ai_meta = _build_explanations(findings)
@@ -105,7 +128,7 @@ def run_report(context: Any) -> Any:
         "note": "预留接口：接入历史体检库/工单后，可按场景指纹关联历史问题与修复记录；"
                 "当前仅占位，不发起任何外部请求。",
     }
-    report.metadata["health_section"] = _health_state(getattr(context, "snapshot", None))
+    report.metadata["health_section"] = health_state
     return report
 
 

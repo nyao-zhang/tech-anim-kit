@@ -191,7 +191,11 @@ def test_golden_fixtures_pass_through_runner(name):
     folder = "good" if name.startswith("good") else "bad"
     result = _run(_fixture(folder, name)["snapshot"])
     assert result.passed is True
-    assert result.report.findings == []
+    # 这些 fixture 没有 metadata.health，所以插件规则整组跳过。判据是
+    # 「零误报」（不产生 error/blocker）而不是「零结论」—— 后者会把
+    # 「什么都没检查」也一起锁死，那正是菜单点开看到空结论的原因。
+    assert _errors(result) == []
+    assert _ids(result) == [_RULE + "datasource.missing"]
     assert result.report.metadata["health_section"]["present"] is False
 
 
@@ -211,7 +215,10 @@ def test_missing_health_section_is_not_a_false_positive():
     snapshot["skin"]["weight_sum_deviation"] = 0.5
     snapshot["metadata"] = {"seed": 3}  # 没有 health
     result = _run(snapshot)
-    assert result.report.findings == []
+    # 场景里有负缩放、命名空间污染、超限影响骨，但没有 health 数据源，
+    # 规则不该「猜」出问题（零误报），同时必须明说本次没检查。
+    assert _errors(result) == []
+    assert _ids(result) == [_RULE + "datasource.missing"]
     assert result.passed is True
 
 
@@ -227,7 +234,8 @@ def test_non_dict_health_skips_whole_group(metadata):
     snapshot["metadata"] = metadata
     snapshot["joints"]["root"]["scale"] = [-1.0, 1.0, 1.0]
     result = _run(snapshot)
-    assert result.report.findings == []
+    assert _errors(result) == []
+    assert _ids(result) == [_RULE + "datasource.missing"]
     assert result.report.metadata["health_section"]["present"] is False
 
 
@@ -568,3 +576,14 @@ def test_ui_module_imports_without_qt():
     ui = _load("ui_qt")
     assert callable(ui.show)
     assert ui.TOOL_ID == TOOL_ID
+
+
+def test_present_but_empty_health_is_a_real_pass():
+    """health 存在但为空 = 真的检查过、没发现问题，不该报「未检查」。
+
+    这是与上一条用例的关键区分：缺数据源要提示，数据源为空则不必。
+    两者混同会让「零误报」变成「永不报警」。
+    """
+    result = _run(_snapshot({}))
+    assert result.report.findings == []
+    assert result.report.metadata["health_section"]["present"] is True

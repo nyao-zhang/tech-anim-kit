@@ -55,7 +55,10 @@ def test_empty_scene_passes_without_plugin_fields():
     result = _run({})
     assert isinstance(result.report, Report)
     assert result.passed is True
-    assert result.report.findings == []
+    # 空快照没有 metadata.health：规则一条都不跑，但必须留一条说明，
+    # 否则界面会把「没检查」显示成「没问题」。
+    assert [item.rule_id for item in result.report.findings] == [
+        TOOL_ID + ".datasource.missing"]
     assert result.report.metadata["health_section"]["present"] is False
 
 

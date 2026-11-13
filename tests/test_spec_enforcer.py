@@ -219,7 +219,10 @@ def test_all_forty_fixtures_produce_no_finding_without_scope():
     for folder in ("good", "bad"):
         for fixture in _all_fixtures(folder):
             result = _run(fixture["snapshot"])
-            assert result.report.findings == [], fixture["id"]
+            # 未开作用域 = 零误报，但不是零结论：必须有一条说清「本次跳过」。
+            # 否则 UI 把「未检查」显示成「全部合格」。
+            assert [item.rule_id for item in result.report.findings] == [
+                TOOL_ID + ".scope.disabled"], fixture["id"]
             assert result.passed is True, fixture["id"]
             assert result.report.metadata["plan_count"] == 0
             assert result.report.metadata["scope"]["enabled"] is False

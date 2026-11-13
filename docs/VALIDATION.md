@@ -195,3 +195,50 @@ python validation/maya_startup_probe.py --maya-version 2024
 在 Maya 2026 每次启动都报
 `RuntimeError: AttributeError: module 'vaccine' has no attribute 'phage'` ——
 **与 TAK 无关的既有问题**，但用户的 Maya 每次启动都在刷这条错误，值得清理。
+
+## G. 模块文档的验证状态（2026-11-14）
+
+`docs/modules/` 下十一份文档不是照着功能描述写的，每一份都对着代码核过字段与
+默认值，并把第 6 节的示例真正跑了一遍。验证方式与覆盖范围如下。
+
+### G.1 已自动验证（每次 CI 都跑）
+
+| 项 | 手段 | 结果 |
+|---|---|---|
+| 覆盖度 | `tests/test_docs_modules.py` | 11 个插件各有一份文档，无孤立文件 |
+| 结构 | 同上 | 每份恰好 8 个二级标题，含「解决什么问题 / 打开 / 输入 / 输出 / 关系」 |
+| 标识真实性 | 同上 | 文档里以本插件前缀出现的标识，必须能在源码里找到（含 `TOOL_ID + ".x"` 与 `"%s.candidate.%s"` 两种拼接形式） |
+| 反向完整性 | 同上 | 52 条已注册规则中属于该插件的，必须都出现在文档里 |
+| 排版 | 同上 | 代码块围栏成对、无 emoji、版本标注不比当前版本新 |
+| 交叉验证 | 同上 | `docs/MODULES.md` 链接到全部 11 份 |
+
+护栏本身做过有效性测试：往 `rig_health_guard.md` 插一个假的
+`rig_health_guard.this_rule_does_not_exist`，测试确实失败并指出该标识。
+
+### G.2 写文档时发现并修掉的缺陷（0.3.3）
+
+文档要求写清「点菜单会发生什么」，于是逐条跑了菜单路径，暴露出两处空转：
+
+- **菜单「场景体检」**：`_run_tool` 不传 `options` → `include_builtin=False` →
+  只跑插件规则 → 而 9 条插件规则全依赖 `metadata.health`（Maya 适配器不采集）
+  → 整组跳过 → `passed=True, findings=0`。**点开显示「通过」，实际没检查**。
+- **菜单「规范校验」**：同因，7 条规则要求显式开作用域 → `passed=True, findings=0`。
+
+两处已修（菜单传 `_MENU_OPTIONS`，并在报告里留一条 INFO 说明「本次未执行」），
+测试锁在 `tests/test_maya_menu.py` 与两处 `test_core.py` 里。
+
+### G.3 仍待你在真机确认
+
+| 项 | 为什么我没法替你验 |
+|---|---|
+| 菜单「场景体检」的**真实结论** | 适配器还不采集 `health`，现在只会如实显示「未执行体检规则」。要看到真实结论，得先补采集环节 |
+| Qt 面板的渲染与「应用修复」 | 需要 Qt 环境与真实场景；本机用 `NullAdapter` 只验到 `committed` / `changes[].status` 这一层 |
+| Web 面板五个页签的浏览器交互 | 只测了 `handle_api` 纯函数，没起 HTTP 服务点页签 |
+| UE 侧导入校验的真实资产 | 需要真实 UE 资产；文档里用的是注入的 `ue_assets` |
+| ML Deformer 的训练链路 | UE 5.7/5.8 的 Python 侧没暴露相关类，能力位恒为 `false`——不可验证，不是我漏了 |
+
+**文档里所有「实际输出」代码块都来自本机真实运行**（Python 3.13 / Windows 11），
+没有一处是推测值。唯一需要说明的是 `mldeformer_factory` 的 `version` 与
+`pose_digest`：它们是内容寻址算出来的，同一份 fixture 在任何机器上都应得到
+`8542257e7b188b05` / `f565ee0d97213a72`——如果你那边跑出别的值，说明输入不一致，
+值得查。

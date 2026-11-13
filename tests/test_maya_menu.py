@@ -280,3 +280,38 @@ def test_menu_items_view_matches_constant():
     assert len(view) == len(menu.MENU_ITEMS)
     assert view[0]["action"] == menu.MENU_ITEMS[0][1]
     assert any(item["label"] == "---" for item in view)
+
+
+def test_menu_options_switch_on_health_and_spec_scope():
+    """菜单点「场景体检」「规范校验」必须带作用域开关。
+
+    不带的话两者都只跑空作用域：体检的 9 条规则全依赖 metadata.health、
+    规范校验要显式开启 spec_enforcer，结果是点完显示「通过」而一条规则
+    都没跑。这条用例锁的是「菜单入口 = 用户明确要检查」这个语义。
+    """
+    assert menu._MENU_OPTIONS["rig_health_guard"]["include_builtin"] is True
+    assert menu._MENU_OPTIONS["spec_enforcer"]["spec_enforcer"] is True
+
+
+def test_run_tool_forwards_menu_options(monkeypatch):
+    """``_run_tool`` 真的把选项交给 run_tool，而不是定义了不用。"""
+    recorded = {}
+
+    class _FakeResult:
+        passed = True
+        report = None
+
+    def _fake_run_tool(tool_id, snapshot=None, **kwargs):
+        recorded[tool_id] = kwargs.get("options")
+        return _FakeResult()
+
+    fake_qt = ModuleType("tak.ui.qt")
+    fake_qt.show_report = lambda result: None
+    monkeypatch.setitem(sys.modules, "tak.ui.qt", fake_qt)
+    monkeypatch.setattr("tak.core.runner.run_tool", _fake_run_tool)
+
+    menu._run_tool("rig_health_guard")
+    menu._run_tool("spec_enforcer")
+
+    assert recorded["rig_health_guard"] == {"include_builtin": True}
+    assert recorded["spec_enforcer"] == {"spec_enforcer": True}

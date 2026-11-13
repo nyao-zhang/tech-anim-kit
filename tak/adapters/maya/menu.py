@@ -228,12 +228,24 @@ def _run_tool(tool_id: str) -> Any:
 
     adapter = adapter_for("maya")
     snapshot = adapter.get_skeleton_snapshot()
-    result = run_tool(tool_id, snapshot, dcc="maya", adapter=adapter)
+    # 菜单点击 = 用户明确要检查这一项，因此必须传对应开关：
+    # 体检要连内置规范规则一起跑；规范校验要显式开启作用域。
+    # 不传的话两者都只跑「空作用域」，点完看到「通过」但什么都没检查。
+    options = _MENU_OPTIONS.get(tool_id)
+    result = run_tool(tool_id, snapshot, dcc="maya", adapter=adapter,
+                      options=dict(options) if options else None)
     show_report(result)
     return {"ok": bool(getattr(result, "passed", False)),
             "tool_id": tool_id,
             "findings": len(getattr(result, "report", None).findings
                             if getattr(result, "report", None) else [])}
+
+
+#: 菜单入口的默认选项。放在模块级，便于测试直接核对而不必模拟整条点击链路。
+_MENU_OPTIONS: Dict[str, Dict[str, Any]] = {
+    "rig_health_guard": {"include_builtin": True},
+    "spec_enforcer": {"spec_enforcer": True},
+}
 
 
 def _open_web_panel(tab: str = "") -> Any:

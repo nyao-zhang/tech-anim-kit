@@ -54,7 +54,9 @@ def test_empty_scene_passes_without_scope():
     result = _run({})
     assert isinstance(result.report, Report)
     assert result.passed is True
-    assert result.report.findings == []
+    # 未开作用域不等于「规范全部合格」，必须有且仅有一条跳过说明。
+    assert [item.rule_id for item in result.report.findings] == [
+        TOOL_ID + ".scope.disabled"]
     assert result.report.metadata["scope"]["enabled"] is False
 
 

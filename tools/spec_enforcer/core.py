@@ -187,11 +187,27 @@ def run_report(ctx: Any) -> Any:
     report.metadata["fix_plan"] = plan.to_dict()
     report.metadata["plan_count"] = len(plan.actions)
     report.metadata["skipped_fixes"] = skipped
+    scope_enabled = _scope_enabled(ctx)
     report.metadata["scope"] = {
-        "enabled": _scope_enabled(ctx),
+        "enabled": scope_enabled,
         "key": "metadata.spec_enforcer 或 options.spec_enforcer",
         "note": "未显式开启时规则整组跳过，保证对普通快照零误报。",
     }
+
+    # 同理：跳过要说出来。否则「通过 / 0 条结论」会被读成「规范全部合格」，
+    # 而实际是一条规则都没跑。INFO 不改变判定。
+    if not scope_enabled:
+        from tak.core.rules.base import Finding, Severity
+
+        report.findings.append(Finding(
+            rule_id=TOOL_ID + ".scope.disabled",
+            severity=Severity.INFO,
+            message="规范校验未开启作用域，本次未执行任何规范规则；"
+                    "结论为空不代表符合规范。",
+            fix_hint="菜单入口会自动开启；脚本调用请显式传 "
+                     "options={'spec_enforcer': True}。",
+            data={"expected_key": report.metadata["scope"]["key"]},
+        ))
     report.metadata["dry_run_only"] = True
     report.metadata["legend"] = dict(_LEGEND)
     return report
