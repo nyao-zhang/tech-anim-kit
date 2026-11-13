@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<!-- 主题契约：缺省深色（根节点 data-theme="dark"）；点击右上角按钮把根节点切成 data-theme="light"，刷新后记忆。 -->
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TAK 工具面板</title>
+<!-- 离线优先：不引用任何外部字体、图片与脚本资源，也不用第三方 JS 框架 -->
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/app.css">
+<script>
+/* 首屏主题回填：避免刷新后先闪一下深色再切浅色。 */
+(function () {
+    try {
+        var saved = window.localStorage.getItem("tak.web.theme");
+        if (saved === "light") { document.documentElement.setAttribute("data-theme", "light"); }
+    } catch (err) { /* 隐私模式下忽略 */ }
+}());
+</script>
+<style>
+/* panel.html 内的少量关键覆盖：同样只用 var(--tak-*)，不出现任何字面颜色值。 */
+.tak-panel.tak-card { max-width: none; margin: 0; }
+.tak-app { min-height: 100vh; display: flex; flex-direction: column; }
+.tak-appbar { position: sticky; top: 0; z-index: 20; }
+.tak-shell { flex: 1; display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; padding: 16px; align-items: start; }
+.tak-statusbar { position: sticky; bottom: 0; z-index: 20; }
+@media (max-width: 760px) { .tak-shell { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body class="tak-app">
+
+<header class="tak-panel tak-card tak-appbar">
+  <div class="tak-appbar-inner">
+    <div class="tak-brand">
+      <span class="tak-logo">TAK</span>
+      <div class="tak-brand-text">
+        <h1>技术动画工具面板</h1>
+        <span class="tak-meta">tech-anim-kit · 跨 DCC 绑定体检与工具运行</span>
+      </div>
+    </div>
+    <div class="tak-appbar-actions">
+      <span id="serviceBadge" class="tak-state tak-state-fail">服务连接中</span>
+      <button id="themeToggle" class="tak-btn" type="button" aria-label="切换深浅主题">浅色</button>
+    </div>
+  </div>
+</header>
+
+<div class="tak-shell">
+
+  <!-- ── 左侧：工具列表 ───────────────────────────────────────────── -->
+  <aside class="tak-panel tak-card tak-sidebar">
+    <div class="tak-sidebar-head">
+      <div>
+        <div class="tak-sidebar-title">工具列表</div>
+        <span class="tak-hint" id="toolCount">加载中…</span>
+      </div>
+    </div>
+    <input id="toolFilter" class="tak-input" type="search" placeholder="按名称或 ID 过滤…" autocomplete="off">
+    <div id="toolList" class="tak-tool-list" role="listbox" aria-label="工具列表"></div>
+    <div id="toolEmpty" class="tak-empty">
+      <p class="tak-empty-title">暂无可用工具</p>
+      <p class="tak-hint">在 <code>tools/</code> 下放置带 <code>manifest.json</code> 的插件，刷新后即可出现。</p>
+    </div>
+  </aside>
+
+  <!-- ── 右侧：主区 ───────────────────────────────────────────────── -->
+  <main class="tak-main">
+
+    <section class="tak-panel tak-card tak-detail">
+      <div class="tak-header">
+        <div>
+          <h1 id="detailTitle">未选择工具</h1>
+          <span class="tak-meta" id="detailId">从左侧列表选择一个工具</span>
+        </div>
+        <span id="detailState" class="tak-state">待机</span>
+      </div>
+      <p class="tak-detail-desc" id="detailDesc">工具说明会显示在这里。</p>
+      <div id="detailDcc" class="tak-badges"></div>
+
+      <div class="tak-controls">
+        <label class="tak-field">
+          <span class="tak-field-label">目标 DCC</span>
+          <select id="dccSelect" class="tak-select">
+            <option value="maya">Maya</option>
+            <option value="max">3ds Max</option>
+            <option value="mobu">MotionBuilder</option>
+            <option value="unreal">Unreal Engine</option>
+          </select>
+        </label>
+        <div class="tak-control-actions">
+          <button id="runBtn" class="tak-btn tak-btn-primary" type="button" disabled>运行工具</button>
+          <button id="evaluateBtn" class="tak-btn" type="button">规范化验</button>
+        </div>
+      </div>
+      <p class="tak-hint" id="detailHint">运行会调用后端统一的 <code>run_tool</code> 契约；规范化验直接跑全部内置规则。</p>
+    </section>
+
+    <section class="tak-panel tak-card">
+      <div class="tak-header">
+        <div>
+          <h1>快照体检</h1>
+          <span class="tak-meta">粘贴 Export Bridge 的 sidecar 快照，离线跑规范校验</span>
+        </div>
+        <span id="snapshotState" class="tak-state">未载入快照</span>
+      </div>
+      <textarea id="snapshotInput" class="tak-textarea" rows="6" spellcheck="false"
+                placeholder='粘贴 JSON 快照，例如 {"joints": {"root": {...}}}'></textarea>
+      <div class="tak-controls">
+        <div class="tak-control-actions">
+          <button id="snapshotEvalBtn" class="tak-btn" type="button">用快照体检</button>
+          <button id="snapshotClearBtn" class="tak-btn tak-btn-ghost" type="button">清空</button>
+        </div>
+        <span class="tak-hint">快照不会写回场景，只做只读判定。</span>
+      </div>
+    </section>
+
+    <section class="tak-panel tak-card">
+      <div class="tak-header">
+        <div>
+          <h1>结果</h1>
+          <span class="tak-meta" id="resultMeta">尚未运行任何检查</span>
+        </div>
+        <span id="resultState" class="tak-state">待机</span>
+      </div>
+
+      <div id="resultSummary" class="tak-summary"></div>
+
+      <div class="tak-legend">
+        <span class="tak-hint">状态徽章：</span>
+        <span class="tak-state tak-state-pass">通过</span>
+        <span class="tak-state tak-state-fail">不通过</span>
+        <span class="tak-hint">无 ERROR / BLOCKER 判定即为通过</span>
+      </div>
+
+      <div id="errorBox" class="tak-errorbox" hidden>
+        <span class="tak-state tak-state-fail">失败</span>
+        <span id="errorText" class="tak-error-text"></span>
+      </div>
+
+      <table class="tak-table" id="resultTable" hidden>
+        <thead>
+          <tr>
+            <th class="tak-col-sev">级别</th>
+            <th class="tak-col-rule">规则</th>
+            <th class="tak-col-node">节点</th>
+            <th class="tak-col-msg">说明</th>
+          </tr>
+        </thead>
+        <tbody id="resultBody"></tbody>
+      </table>
+
+      <div id="resultEmpty" class="tak-empty">
+        <p class="tak-empty-title">暂无结果</p>
+        <p class="tak-hint">选择一个工具并运行，或粘贴快照后执行规范化验。</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer class="tak-panel tak-card tak-statusbar">
+  <span class="tak-status-item">服务 <b id="statusService">—</b></span>
+  <span class="tak-status-sep"></span>
+  <span class="tak-status-item">耗时 <b id="statusDuration">—</b></span>
+  <span class="tak-status-sep"></span>
+  <span class="tak-status-item">结果 <b id="statusCount">0</b></span>
+  <span class="tak-status-item tak-status-right" id="statusVersion">TAK —</span>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

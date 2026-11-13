@@ -29,6 +29,32 @@ jobs:
         run: python tak/ui/generate_theme.py --check
       - name: Core layer smoke check (no pytest / no DCC)
         run: python validation/py_compat_smoke.py
+      - name: Tool plugins are discoverable
+        run: python tools/new_tool.py --list
+      - name: Python 3.9 syntax scan (all shipped code)
+        run: |
+          python - <<'PY'
+          import ast, os, sys
+          skip = ('.git', '.pytest_cache', '__pycache__', '.workbuddy',
+                  'legacy', 'Intermediate', 'Saved', 'DerivedDataCache',
+                  'TakProbe', '.venv', 'venv', 'build', 'dist')
+          bad = []
+          for root, dirs, files in os.walk('.'):
+              dirs[:] = [d for d in dirs if d not in skip]
+              for name in files:
+                  if not name.endswith('.py'):
+                      continue
+                  path = os.path.join(root, name)
+                  try:
+                      with open(path, encoding='utf-8') as fh:
+                          ast.parse(fh.read(), feature_version=(3, 9))
+                  except (SyntaxError, UnicodeError) as exc:
+                      bad.append((path, str(exc)))
+          if bad:
+              print('Python 3.9 incompatible:', bad)
+              sys.exit(1)
+          print('OK: all shipped Python parses as 3.9')
+          PY
       - name: Core layer has no DCC imports
         run: |
           python - <<'PY'
@@ -51,7 +77,7 @@ jobs:
           PY
 
   coverage-gate:
-    name: coverage gate (>=80%)
+    name: coverage gate (DCC-free core >=80%)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,5 +86,10 @@ jobs:
           python-version: "3.13"
       - name: Install test dependencies
         run: python -m pip install --upgrade pip pytest pytest-cov
+      # 硬门槛只作用于零 DCC 依赖的 tak.core：这是 CI 能真实覆盖的层。
+      # tak.adapters / tak.ui 依赖宿主运行时（Maya GUI、UE Editor、Qt），
+      # 无头 Linux 上无法真实覆盖，因此整体覆盖率只做观测、不设门槛。
       - name: Enforce core coverage
-        run: python -m pytest --cov=tak --cov-report=term-missing --cov-fail-under=80 -q
+        run: python -m pytest --cov=tak.core --cov-report=term-missing --cov-fail-under=80 -q
+      - name: Report overall coverage (informational)
+        run: python -m pytest --cov=tak --cov-report=term -q

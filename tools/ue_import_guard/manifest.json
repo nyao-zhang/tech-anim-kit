@@ -1,0 +1,10 @@
+{
+  "id": "ue_import_guard",
+  "name": "UE Import Guard 导入校验",
+  "description": "Unreal 侧导入守卫：校验 Skeleton 兼容性、必需骨骼链与命名、根运动、AnimSequence 压缩与曲线、材质槽、LOD deformer 标记，并把 Export Bridge 的 sidecar 快照与 UE 侧快照做 diff。只读检查，不改资产。",
+  "dcc": ["unreal"],
+  "min_version": { "unreal": "5.8" },
+  "entry": "ue_import_guard",
+  "ui": "both",
+  "permissions": ["scene.read", "import.validate"]
+}

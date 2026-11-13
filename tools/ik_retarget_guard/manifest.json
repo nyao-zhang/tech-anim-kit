@@ -1,0 +1,10 @@
+{
+  "id": "ik_retarget_guard",
+  "name": "IK Retarget Guard 重定向映射校验",
+  "description": "只读校验 Unreal IK Rig 与 IK Retargeter 的骨骼链映射、跨命名体系骨骼对齐、Root/Pelvis 偏移及重定向姿态偏差，并生成可交接给 Skeleton Mapper 的离线映射资产。",
+  "dcc": ["unreal"],
+  "min_version": { "unreal": "5.8" },
+  "entry": "ik_retarget_guard",
+  "ui": "both",
+  "permissions": ["scene.read"]
+}

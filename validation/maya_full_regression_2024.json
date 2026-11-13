@@ -1,0 +1,413 @@
+{
+  "ok": true,
+  "probe": "maya_full_regression",
+  "python_version": "3.10.8",
+  "platform": "Windows-10-10.0.19041",
+  "repo_root": "C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35",
+  "fixture_count": 40,
+  "false_positives": 0,
+  "false_negatives": 0,
+  "errors": [],
+  "fixture_details": [
+    {
+      "id": "good_001",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_002",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_003",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_004",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_005",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_006",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_007",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_008",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_009",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_010",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_011",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_012",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_013",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_014",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_015",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_016",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_017",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_018",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_019",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "good_020",
+      "expected_pass": true,
+      "actual_pass": true,
+      "errors": 0,
+      "violations": []
+    },
+    {
+      "id": "bad_001",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 2,
+      "violations": [
+        "naming.joint_pattern"
+      ]
+    },
+    {
+      "id": "bad_002",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 3,
+      "violations": [
+        "naming.forbidden_token",
+        "naming.joint_pattern"
+      ]
+    },
+    {
+      "id": "bad_003",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 1,
+      "violations": [
+        "naming.namespace"
+      ]
+    },
+    {
+      "id": "bad_004",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 1,
+      "violations": [
+        "skeleton.missing_required"
+      ]
+    },
+    {
+      "id": "bad_005",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 2,
+      "violations": [
+        "skeleton.max_depth"
+      ]
+    },
+    {
+      "id": "bad_006",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 1,
+      "violations": [
+        "skeleton.negative_scale"
+      ]
+    },
+    {
+      "id": "bad_007",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 1,
+      "violations": [
+        "skeleton.unfrozen_transform"
+      ]
+    },
+    {
+      "id": "bad_008",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 1,
+      "violations": [
+        "skin.max_influences"
+      ]
+    },
+    {
+      "id": "bad_009",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 1,
+      "violations": [
+        "skin.weight_sum"
+      ]
+    },
+    {
+      "id": "bad_010",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 1,
+      "violations": [
+        "skin.unknown_deformer"
+      ]
+    },
+    {
+      "id": "bad_011",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 1,
+      "violations": [
+        "export.unit_mismatch"
+      ]
+    },
+    {
+      "id": "bad_012",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 1,
+      "violations": [
+        "export.up_axis_mismatch"
+      ]
+    },
+    {
+      "id": "bad_013",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 1,
+      "violations": [
+        "export.frame_range_mismatch"
+      ]
+    },
+    {
+      "id": "bad_014",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 2,
+      "violations": [
+        "naming.namespace",
+        "skin.max_influences"
+      ]
+    },
+    {
+      "id": "bad_015",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 2,
+      "violations": [
+        "export.unit_mismatch",
+        "skeleton.missing_required"
+      ]
+    },
+    {
+      "id": "bad_016",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 3,
+      "violations": [
+        "export.up_axis_mismatch",
+        "skeleton.negative_scale",
+        "skin.weight_sum"
+      ]
+    },
+    {
+      "id": "bad_017",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 3,
+      "violations": [
+        "skeleton.max_depth",
+        "skin.unknown_deformer"
+      ]
+    },
+    {
+      "id": "bad_018",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 4,
+      "violations": [
+        "export.frame_range_mismatch",
+        "naming.joint_pattern",
+        "skin.max_influences"
+      ]
+    },
+    {
+      "id": "bad_019",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 2,
+      "violations": [
+        "skeleton.unfrozen_transform",
+        "skin.weight_sum"
+      ]
+    },
+    {
+      "id": "bad_020",
+      "expected_pass": false,
+      "actual_pass": false,
+      "errors": 3,
+      "violations": [
+        "export.frame_range_mismatch",
+        "export.unit_mismatch",
+        "export.up_axis_mismatch"
+      ]
+    }
+  ],
+  "plugins": {
+    "rig_health_guard": {
+      "runs": 40,
+      "errors": [],
+      "error_findings_total": 36,
+      "ok": true
+    },
+    "spec_enforcer": {
+      "runs": 40,
+      "errors": [],
+      "error_findings_total": 0,
+      "ok": true
+    },
+    "export_bridge": {
+      "runs": 40,
+      "errors": [],
+      "error_findings_total": 0,
+      "ok": true
+    },
+    "ue_import_guard": {
+      "runs": 40,
+      "errors": [],
+      "error_findings_total": 0,
+      "ok": true
+    },
+    "ik_retarget_guard": {
+      "runs": 40,
+      "errors": [],
+      "error_findings_total": 0,
+      "ok": true
+    }
+  },
+  "dsl": {
+    "dry_run_no_side_effects": true,
+    "permission_enforced": true,
+    "rollback_on_failure": true,
+    "commit_on_success": true
+  },
+  "maya_live": {
+    "available": true,
+    "reason": "",
+    "maya_version": "2024",
+    "joint_count": 4,
+    "unit": "cm",
+    "up_axis": "Y",
+    "skin": {
+      "mesh": "probe_mesh",
+      "skin_clusters": [
+        "probe_skin"
+      ],
+      "influences": [
+        "root",
+        "pelvis",
+        "spine_01",
+        "head"
+      ],
+      "max_influences_found": 2,
+      "weight_sum_deviation": 0.0,
+      "deformers": [
+        "skinCluster"
+      ],
+      "vertex_count": 8,
+      "sampled_vertices": 8,
+      "truncated": false
+    },
+    "rule_count": 37,
+    "report_passed": false,
+    "undo_rollback": "ok"
+  }
+}

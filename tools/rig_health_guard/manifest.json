@@ -1,0 +1,10 @@
+{
+  "id": "rig_health_guard",
+  "name": "Rig Health Guard 场景体检",
+  "description": "绑定场景体检：孤立节点、未冻结变换、负缩放、命名空间污染、重复 shape、蒙皮权重与影响骨超限、遗留 reference、控制器未上色。只读检查并给出 dry-run 修复建议，不自动改写场景。",
+  "dcc": ["maya", "max", "mobu", "unreal"],
+  "min_version": { "maya": "2023", "max": "2023", "mobu": "2023", "unreal": "5.8" },
+  "entry": "rig_health_guard",
+  "ui": "qt",
+  "permissions": ["scene.read"]
+}

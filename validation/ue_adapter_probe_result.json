@@ -1,0 +1,417 @@
+{
+  "ok": true,
+  "probe": "ue_adapter",
+  "python_version": "3.11.8 (tags/v3.11.8:db85d51, Feb  6 2024, 22:03:32) [MSC v.1937 64 bit (AMD64)]",
+  "python_executable": "H:\\UE_5.8\\Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "repo_root": "C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35",
+  "engine_version": "5.8.4-58902052+++UE5+Release-5.8",
+  "available": true,
+  "describe": {
+    "dcc": "unreal",
+    "name": "unreal",
+    "version": "5.8.4-58902052+++UE5+Release-5.8",
+    "python_version": "3.11",
+    "capabilities": [
+      "scene.query",
+      "skin.query",
+      "skeleton.snapshot",
+      "import.validate"
+    ],
+    "available": true,
+    "offline": false,
+    "engine_version": "5.8.4-58902052+++UE5+Release-5.8",
+    "api_probe": {
+      "SystemLibrary": true,
+      "Paths": true,
+      "EditorAssetLibrary": true,
+      "EditorUtilityLibrary": true,
+      "AssetRegistryHelpers": true,
+      "EditorDialog": true,
+      "EditorDialogLibrary": false,
+      "EditorActorSubsystem": true,
+      "EditorLevelLibrary": true,
+      "ToolMenus": true,
+      "ToolMenuEntryScript": true,
+      "Skeleton": true,
+      "SkeletalMesh": true,
+      "AnimSequence": true,
+      "IKRigDefinition": true,
+      "IKRetargeter": true,
+      "MLDeformerAsset": false,
+      "NeuralMorphModel": false,
+      "VertexDeltaModel": false,
+      "MLDeformerComponent": false,
+      "DeformerGraphAsset": false,
+      "MeshDeformerCollection": true,
+      "ControlRig": true,
+      "AnimBlueprint": true,
+      "EditorUtilityWidget": true,
+      "PythonScriptLibrary": true,
+      "InternationalizationLibrary": true
+    },
+    "api_missing": [
+      "DeformerGraphAsset",
+      "EditorDialogLibrary",
+      "MLDeformerAsset",
+      "MLDeformerComponent",
+      "NeuralMorphModel",
+      "VertexDeltaModel"
+    ],
+    "native_up_axis": "Z",
+    "degraded": [
+      "MLDeformerAsset 在 Python 侧未暴露，相关能力降级",
+      "NeuralMorphModel 在 Python 侧未暴露，相关能力降级",
+      "VertexDeltaModel 在 Python 侧未暴露，相关能力降级",
+      "MLDeformerComponent 在 Python 侧未暴露，相关能力降级",
+      "DeformerGraphAsset 在 Python 侧未暴露，相关能力降级"
+    ]
+  },
+  "api_missing": [
+    "DeformerGraphAsset",
+    "EditorDialogLibrary",
+    "MLDeformerAsset",
+    "MLDeformerComponent",
+    "NeuralMorphModel",
+    "VertexDeltaModel"
+  ],
+  "snapshot": {
+    "dcc": "unreal",
+    "unit": "cm",
+    "up_axis": "Y",
+    "native_up_axis": "Z",
+    "matrix_source": "none",
+    "joint_count": 0,
+    "joints": [],
+    "skin": {
+      "max_influences_found": 0,
+      "weight_sum_deviation": 0.0,
+      "deformers": [],
+      "mesh_count": 0
+    },
+    "degraded": [
+      "未找到 Skeleton / SkeletalMesh 资产（空探测项目属正常）",
+      "UE Python 未暴露骨骼静止变换，bind_matrix 以单位阵占位"
+    ]
+  },
+  "evaluate": {
+    "passed": false,
+    "counts": {
+      "info": 0,
+      "warning": 0,
+      "error": 19,
+      "blocker": 0
+    },
+    "rules_available": 16,
+    "findings": [
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'calf_L'",
+        "node": "calf_L",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "calf_L",
+          "fix": {
+            "op": "create_joint",
+            "name": "calf_L"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'calf_R'",
+        "node": "calf_R",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "calf_R",
+          "fix": {
+            "op": "create_joint",
+            "name": "calf_R"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'clavicle_L'",
+        "node": "clavicle_L",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "clavicle_L",
+          "fix": {
+            "op": "create_joint",
+            "name": "clavicle_L"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'clavicle_R'",
+        "node": "clavicle_R",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "clavicle_R",
+          "fix": {
+            "op": "create_joint",
+            "name": "clavicle_R"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'foot_L'",
+        "node": "foot_L",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "foot_L",
+          "fix": {
+            "op": "create_joint",
+            "name": "foot_L"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'foot_R'",
+        "node": "foot_R",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "foot_R",
+          "fix": {
+            "op": "create_joint",
+            "name": "foot_R"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'hand_L'",
+        "node": "hand_L",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "hand_L",
+          "fix": {
+            "op": "create_joint",
+            "name": "hand_L"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'hand_R'",
+        "node": "hand_R",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "hand_R",
+          "fix": {
+            "op": "create_joint",
+            "name": "hand_R"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'head'",
+        "node": "head",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "head",
+          "fix": {
+            "op": "create_joint",
+            "name": "head"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'lowerarm_L'",
+        "node": "lowerarm_L",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "lowerarm_L",
+          "fix": {
+            "op": "create_joint",
+            "name": "lowerarm_L"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'lowerarm_R'",
+        "node": "lowerarm_R",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "lowerarm_R",
+          "fix": {
+            "op": "create_joint",
+            "name": "lowerarm_R"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'neck'",
+        "node": "neck",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "neck",
+          "fix": {
+            "op": "create_joint",
+            "name": "neck"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'pelvis'",
+        "node": "pelvis",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "pelvis",
+          "fix": {
+            "op": "create_joint",
+            "name": "pelvis"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'root'",
+        "node": "root",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "root",
+          "fix": {
+            "op": "create_joint",
+            "name": "root"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'spine_01'",
+        "node": "spine_01",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "spine_01",
+          "fix": {
+            "op": "create_joint",
+            "name": "spine_01"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'thigh_L'",
+        "node": "thigh_L",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "thigh_L",
+          "fix": {
+            "op": "create_joint",
+            "name": "thigh_L"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'thigh_R'",
+        "node": "thigh_R",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "thigh_R",
+          "fix": {
+            "op": "create_joint",
+            "name": "thigh_R"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'upperarm_L'",
+        "node": "upperarm_L",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "upperarm_L",
+          "fix": {
+            "op": "create_joint",
+            "name": "upperarm_L"
+          },
+          "duration_ms": 0.0
+        }
+      },
+      {
+        "rule_id": "skeleton.missing_required",
+        "severity": "error",
+        "message": "缺少必需关节 'upperarm_R'",
+        "node": "upperarm_R",
+        "fix_hint": "按规范补齐该关节并重建蒙皮权重",
+        "data": {
+          "joint": "upperarm_R",
+          "fix": {
+            "op": "create_joint",
+            "name": "upperarm_R"
+          },
+          "duration_ms": 0.0
+        }
+      }
+    ]
+  },
+  "degraded": [
+    "MLDeformerAsset 在 Python 侧未暴露，相关能力降级",
+    "NeuralMorphModel 在 Python 侧未暴露，相关能力降级",
+    "VertexDeltaModel 在 Python 侧未暴露，相关能力降级",
+    "MLDeformerComponent 在 Python 侧未暴露，相关能力降级",
+    "DeformerGraphAsset 在 Python 侧未暴露，相关能力降级"
+  ],
+  "errors": [],
+  "tak_version": "0.1.0",
+  "list_nodes": {
+    "joint": [],
+    "anim_count": 0,
+    "skeletal_mesh_count": 0
+  },
+  "ui_parent": null,
+  "supports": [
+    "scene.query",
+    "skin.query",
+    "skeleton.snapshot",
+    "import.validate"
+  ],
+  "adapter_is_unreal": true,
+  "passed": false
+}

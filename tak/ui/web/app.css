@@ -1,0 +1,260 @@
+/* TAK Web 面板组件样式。
+ *
+ * 严格约束：
+ *   - 只使用 tak/ui/theme.css 暴露的 var(--tak-*) 变量；
+ *   - 不出现任何字面颜色值（十六进制、颜色函数、具名颜色一律禁止）；
+ *   - 不引用任何外部字体、图片或脚本资源（完全离线）。
+ */
+
+/* ── 通用控件 ─────────────────────────────────────────────────────── */
+.tak-btn {
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 6px 14px;
+    border-radius: var(--tak-radius-md);
+    border: 1px solid var(--tak-border-strong);
+    background: var(--tak-elevated);
+    color: var(--tak-text);
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.tak-btn:hover:not(:disabled) { border-color: var(--tak-accent); }
+.tak-btn:focus-visible { outline: 2px solid var(--tak-accent); outline-offset: 2px; }
+.tak-btn:disabled { opacity: .45; cursor: not-allowed; }
+.tak-btn-primary {
+    background: var(--tak-accent);
+    border-color: var(--tak-accent);
+    color: var(--tak-accent-text);
+    font-weight: 600;
+}
+.tak-btn-primary:hover:not(:disabled) { background: var(--tak-accent); border-color: var(--tak-accent); }
+.tak-btn-ghost { background: var(--tak-bg); color: var(--tak-text-muted); }
+
+.tak-input, .tak-select, .tak-textarea {
+    font: inherit;
+    font-size: 12px;
+    color: var(--tak-text);
+    background: var(--tak-elevated);
+    border: 1px solid var(--tak-border);
+    border-radius: var(--tak-radius-sm);
+    padding: 6px 9px;
+    width: 100%;
+}
+.tak-input:focus, .tak-select:focus, .tak-textarea:focus {
+    outline: 2px solid var(--tak-accent);
+    outline-offset: 1px;
+    border-color: var(--tak-accent);
+}
+.tak-textarea {
+    font-family: var(--tak-mono);
+    line-height: 1.55;
+    resize: vertical;
+    min-height: 96px;
+}
+.tak-select { cursor: pointer; }
+
+.tak-code {
+    font-family: var(--tak-mono);
+    font-size: 12px;
+    color: var(--tak-accent);
+}
+
+/* ── 顶栏 ─────────────────────────────────────────────────────────── */
+.tak-appbar {
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    border-top: 0;
+    padding: 10px 16px;
+    background: var(--tak-surface);
+}
+.tak-appbar-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--tak-space-md);
+    max-width: 1400px;
+    margin: 0 auto;
+}
+.tak-brand { display: flex; align-items: center; gap: var(--tak-space-md); }
+.tak-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--tak-radius-md);
+    background: var(--tak-accent);
+    color: var(--tak-accent-text);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: .5px;
+}
+.tak-brand-text h1 { font-size: 15px; font-weight: 600; margin: 0; }
+.tak-brand-text .tak-meta { margin: 0; }
+.tak-appbar-actions { display: flex; align-items: center; gap: var(--tak-space-sm); }
+
+/* ── 布局 ─────────────────────────────────────────────────────────── */
+.tak-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.tak-sidebar { padding: var(--tak-space-md); display: flex; flex-direction: column; gap: var(--tak-space-sm); }
+.tak-sidebar-head { display: flex; align-items: baseline; justify-content: space-between; }
+.tak-sidebar-title { font-size: 13px; font-weight: 600; }
+.tak-sidebar .tak-hint { margin: 0; }
+
+/* ── 工具卡片列表 ─────────────────────────────────────────────────── */
+.tak-tool-list { display: flex; flex-direction: column; gap: 8px; max-height: 62vh; overflow-y: auto; }
+.tak-tool-card {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: var(--tak-text);
+    background: var(--tak-elevated);
+    border: 1px solid var(--tak-border);
+    border-left: 3px solid var(--tak-border-strong);
+    border-radius: var(--tak-radius-md);
+    padding: 9px 11px;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+}
+.tak-tool-card:hover { border-color: var(--tak-border-strong); border-left-color: var(--tak-accent); }
+.tak-tool-card:focus-visible { outline: 2px solid var(--tak-accent); outline-offset: 1px; }
+.tak-tool-card.is-active {
+    background: var(--tak-accent-soft);
+    border-color: var(--tak-accent);
+    border-left-color: var(--tak-accent);
+}
+.tak-tool-card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tak-tool-name { font-size: 13px; font-weight: 600; }
+.tak-tool-id { font-family: var(--tak-mono); font-size: 11px; color: var(--tak-text-hint); }
+.tak-tool-card.is-active .tak-tool-id { color: var(--tak-accent); }
+.tak-tool-desc {
+    font-size: 12px;
+    color: var(--tak-text-muted);
+    margin: 3px 0 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.tak-tool-dcc { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.tak-dcc-tag {
+    font-family: var(--tak-mono);
+    font-size: 10px;
+    letter-spacing: .3px;
+    padding: 1px 6px;
+    border-radius: var(--tak-radius-sm);
+    background: var(--tak-severity-soft);
+    color: var(--tak-text-muted);
+}
+.tak-tool-card.is-active .tak-dcc-tag { color: var(--tak-text); }
+
+/* ── 详情区 ───────────────────────────────────────────────────────── */
+.tak-detail-desc { color: var(--tak-text-muted); margin: var(--tak-space-sm) 0 var(--tak-space-sm); }
+.tak-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--tak-space-md); }
+.tak-badges .tak-badge { font-family: var(--tak-mono); letter-spacing: .3px; }
+
+.tak-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--tak-space-md);
+    flex-wrap: wrap;
+    padding-top: var(--tak-space-sm);
+    border-top: 1px solid var(--tak-border);
+}
+.tak-field { display: flex; flex-direction: column; gap: 4px; min-width: 160px; }
+.tak-field-label { font-size: 12px; color: var(--tak-text-muted); }
+.tak-control-actions { display: flex; gap: var(--tak-space-sm); align-items: center; }
+
+/* ── 结果区 ───────────────────────────────────────────────────────── */
+.tak-state { white-space: nowrap; }
+.tak-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--tak-space-sm);
+    margin-bottom: var(--tak-space-md);
+    padding-bottom: var(--tak-space-md);
+    border-bottom: 1px solid var(--tak-border);
+}
+.tak-legend .tak-hint { margin: 0; }
+
+.tak-summary { display: flex; flex-wrap: wrap; gap: 8px; margin: var(--tak-space-md) 0; }
+.tak-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: var(--tak-radius-sm);
+    background: var(--tak-severity-soft);
+    color: var(--tak-text-muted);
+    font-size: 12px;
+}
+.tak-chip b { color: var(--tak-text); font-variant-numeric: tabular-nums; }
+.tak-chip-error { color: var(--tak-error); }
+.tak-chip-warning { color: var(--tak-warning); }
+.tak-chip-info { color: var(--tak-info); }
+.tak-chip-blocker { color: var(--tak-error); font-weight: 600; }
+.tak-chip-success { color: var(--tak-success); }
+
+.tak-errorbox {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--tak-space-sm);
+    padding: var(--tak-space-md);
+    margin: var(--tak-space-md) 0;
+    border: 1px solid var(--tak-error);
+    border-radius: var(--tak-radius-md);
+    background: var(--tak-severity-soft);
+}
+/* hidden 属性必须压过上面的 display:flex，否则错误框永远可见。 */
+.tak-errorbox[hidden] { display: none; }
+.tak-errorbox .tak-state { flex: 0 0 auto; align-self: flex-start; }
+.tak-error-text { color: var(--tak-text); font-size: 12px; word-break: break-word; }
+
+.tak-table td { vertical-align: top; }
+.tak-table th { white-space: nowrap; }
+.tak-col-sev { width: 72px; }
+.tak-col-rule { width: 190px; }
+.tak-col-node { width: 130px; }
+.tak-table .tak-badge { display: inline-block; font-family: var(--tak-mono); letter-spacing: .3px; }
+.tak-table .tak-node { font-family: var(--tak-mono); color: var(--tak-text-muted); word-break: break-all; }
+.tak-table .tak-msg { color: var(--tak-text); }
+.tak-table .tak-fix { display: block; margin-top: 3px; }
+
+/* ── 空态 ─────────────────────────────────────────────────────────── */
+.tak-empty {
+    padding: var(--tak-space-xl) var(--tak-space-md);
+    text-align: center;
+    border: 1px dashed var(--tak-border);
+    border-radius: var(--tak-radius-md);
+    background: var(--tak-elevated);
+}
+.tak-empty-title { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--tak-text-muted); }
+.tak-empty .tak-hint { margin: 0; }
+
+/* ── 底部状态条 ───────────────────────────────────────────────────── */
+.tak-statusbar {
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    padding: 7px 16px;
+    display: flex;
+    align-items: center;
+    gap: var(--tak-space-md);
+    background: var(--tak-surface);
+    font-size: 12px;
+    color: var(--tak-text-muted);
+}
+.tak-status-item b { color: var(--tak-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.tak-status-sep { width: 1px; height: 12px; background: var(--tak-border); }
+.tak-status-right { margin-left: auto; font-family: var(--tak-mono); font-size: 11px; }
+
+/* ── 滚动条 ───────────────────────────────────────────────────────── */
+.tak-tool-list::-webkit-scrollbar { width: 8px; }
+.tak-tool-list::-webkit-scrollbar-track { background: var(--tak-bg); border-radius: var(--tak-radius-sm); }
+.tak-tool-list::-webkit-scrollbar-thumb { background: var(--tak-border-strong); border-radius: var(--tak-radius-sm); }
+.tak-tool-list::-webkit-scrollbar-thumb:hover { background: var(--tak-accent); }

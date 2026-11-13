@@ -23,6 +23,8 @@ def main(argv=None) -> int:
     parser.add_argument("--engine", default=DEFAULT_ENGINE)
     parser.add_argument("--timeout", type=int, default=420)
     parser.add_argument("--out", default=RESULT, help="结果 JSON 路径，多版本复验时分开保存")
+    parser.add_argument("--script", default="ue_probe.py",
+                        help="validation/ 下的探测脚本文件名，如 ue_adapter_probe.py")
     args = parser.parse_args(argv)
     result_path = os.path.abspath(args.out)
 
@@ -36,7 +38,7 @@ def main(argv=None) -> int:
         args.engine,
         os.path.join(HERE, "TakProbe.uproject"),
         "-nullrhi", "-unattended", "-nosplash", "-nop4", "-NoSound",
-        "-ExecutePythonScript=" + os.path.join(HERE, "ue_probe.py"),
+        "-ExecutePythonScript=" + os.path.join(HERE, args.script),
         "-log", "-abslog=" + LOG,
     ]
     env = dict(os.environ, TAK_PROBE_OUT=result_path)

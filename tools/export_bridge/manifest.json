@@ -1,0 +1,10 @@
+{
+  "id": "export_bridge",
+  "name": "Export Bridge 导出前后校验",
+  "description": "导出前落盘 sidecar 快照骨架，导出后对比 before/after 快照并分类偏差（单位、轴向、关节增删改、绑定矩阵、父级、帧范围），阻断性偏差直接拦下导出；UE 侧导入校验通过 ue_import_hook 交接给 P3.2，本插件不实现 UE 侧。",
+  "dcc": ["maya", "max", "mobu", "unreal"],
+  "min_version": { "maya": "2023", "max": "2023", "mobu": "2023", "unreal": "5.8" },
+  "entry": "export_bridge",
+  "ui": "qt",
+  "permissions": ["scene.read", "export.fbx"]
+}

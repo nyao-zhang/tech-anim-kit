@@ -1,0 +1,10 @@
+{
+  "id": "spec_enforcer",
+  "name": "Spec Enforcer 规范校验与修复",
+  "description": "按 rig_spec 对骨架做确定性规范校验（命名正则、必需关节、层级深度、权重归一化与影响数上限、control 命名空间与颜色），并把每条问题翻译成参数化 DSL 修复计划：默认 dry-run，必须人工二次确认才写场景。",
+  "dcc": ["maya", "max", "mobu"],
+  "min_version": { "maya": "2023", "max": "2023", "mobu": "2023" },
+  "entry": "spec_enforcer",
+  "ui": "qt",
+  "permissions": ["scene.read", "node.write"]
+}

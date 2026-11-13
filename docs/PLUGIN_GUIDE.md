@@ -113,3 +113,24 @@ python tools/new_tool.py --list
 ```
 
 新工具若引入新的规则类别，请在 `fixtures/generate_fixtures.py` 增加对应的坏场景注入，保证回归覆盖。
+
+## 9. 批次 2：统一运行契约（新增工具必读）
+
+P2/P3 起，UI、DCC 菜单、commandlet、CI 一律通过 `tak.core.runner` 调用工具，插件作者不需要知道调用方是谁：
+
+```python
+from tak.core.runner import run_tool, evaluate, list_tools
+
+result = run_tool("my_tool", snapshot, dcc="maya", adapter=None, options={})
+print(result.passed, result.render("md"))
+```
+
+- `core.py` 优先实现 `run_report(ctx) -> tak.core.report.Report`；也兼容模板的 `run(ctx) -> List[Finding]`（runner 自动包装成 Report）。
+- `ctx` 是 `ToolContext`：`dcc` / `snapshot` / `spec` / `adapter` / `options` / `tool_id` / `plugin`；`ctx.rule_context()` 返回规则引擎上下文，`ctx.adapter_or_null` 保证无宿主时也有可用 adapter。
+- runner 按**文件路径**加载 `core.py`，并自动加载 `rules.py` / `actions.py`（若存在）来触发规则与 DSL 动作注册，且带缓存避免重复注册。因此**插件内禁止 `import rules` / 相对导入**。
+- 规则必须兼容 `tak.core.rules.engine.RuleContext`（用 `getattr` 取 `snapshot` / `spec`，见 `builtin.py`），并显式传 `plugin_id=TOOL_ID`。
+- **回归硬约束**：`tests/test_builtin_rules.py` 会对 40 个 golden fixtures 跑「全部已注册规则」。你的规则在专属字段缺失时必须整组返回 `[]`，且用 `dcc` 限定适用宿主，否则会污染别人的回归结果。
+- 需要「内置规则 + 插件规则」一起跑时，参考 `rig_health_guard` 的 `options["include_builtin"]` 做法：默认隔离便于单测，UI/钩子传 `True` 开完整体检。
+- 插件自带 `test_core.py` 需**显式运行**（`python -m pytest tools/<id>/test_core.py -q`）：多个插件同名文件在 pytest 默认 import 模式下会冲突，且插件自测与 `tests/` 主回归共用全局 `RULE_REGISTRY`，混跑会造成状态耦合。CI 的主回归入口固定为 `tests/`。
+
+仓库内已有的五个插件（`rig_health_guard` / `spec_enforcer` / `export_bridge` / `ue_import_guard` / `ik_retarget_guard`）就是完整范例，新工具建议直接复制其中一个的结构。
