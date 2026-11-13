@@ -57,7 +57,7 @@ QLineEdit, QSpinBox, QComboBox, QPlainTextEdit, QTextEdit {{
     selection-background-color: {accent_soft};
 }}
 QPlainTextEdit {{ font-family: {mono}; }}
-QTableWidget, QTreeWidget, QListView {{
+QTableWidget, QTreeWidget, QListView, QListWidget {{
     background-color: {surface};
     alternate-background-color: {table_alt};
     color: {text};
@@ -65,6 +65,20 @@ QTableWidget, QTreeWidget, QListView {{
     border-radius: {r_md}px;
     gridline-color: {border};
 }}
+QListWidget {{ padding: {s_xs}px; outline: none; }}
+QListWidget::item {{
+    padding: {s_sm}px {s_md}px;
+    border-radius: {r_sm}px;
+    color: {text_muted};
+    border: 1px solid transparent;
+}}
+QListWidget::item:hover {{ background-color: {elevated}; color: {text}; }}
+QListWidget::item:selected {{
+    background-color: {accent_soft};
+    color: {text};
+    border: 1px solid {accent};
+}}
+QListWidget#takCategoryList::item {{ padding: {s_xs}px {s_md}px; }}
 QHeaderView::section {{
     background-color: {elevated};
     color: {text_muted};
@@ -76,6 +90,41 @@ QLabel[takSeverity="error"], QLabel[takSeverity="blocker"] {{ color: {error}; }}
 QLabel[takSeverity="warning"] {{ color: {warning}; }}
 QLabel[takSeverity="info"] {{ color: {info}; }}
 QLabel[takSeverity="success"] {{ color: {success}; }}
+QLabel[takDisplay="true"] {{ font-size: {size_display}px; font-weight: 600; }}
+QLabel[takSection="true"] {{
+    color: {text_muted};
+    font-size: {caption}px;
+    font-weight: 600;
+    padding-top: {s_sm}px;
+}}
+QLabel[takBadge="true"] {{
+    background-color: {severity_soft};
+    color: {text_muted};
+    border: 1px solid {border};
+    border-radius: {r_sm}px;
+    padding: 2px {s_sm}px;
+    font-size: {caption}px;
+}}
+QPushButton[takGhost="true"] {{
+    background-color: transparent;
+    border: 1px solid {border};
+    color: {text_muted};
+}}
+QPushButton[takGhost="true"]:hover {{ color: {text}; border-color: {accent}; }}
+QPushButton:disabled {{ color: {text_hint}; border-color: {border}; }}
+QScrollArea {{ border: none; background: transparent; }}
+QScrollArea > QWidget > QWidget {{ background: transparent; }}
+QSplitter::handle {{ background: {border}; }}
+QSplitter::handle:horizontal {{ width: 1px; }}
+QTabWidget::pane {{ border: none; }}
+QToolTip {{
+    background-color: {elevated};
+    color: {text};
+    border: 1px solid {border_strong};
+    padding: {s_xs}px;
+}}
+QCheckBox, QRadioButton {{ color: {text}; }}
+QCheckBox::indicator, QRadioButton::indicator {{ width: 14px; height: 14px; }}
 QProgressBar {{
     background-color: {elevated};
     border: 1px solid {border};
@@ -139,6 +188,7 @@ def _qss_values(tokens: dict, theme_name: str) -> dict:
         theme=theme_name, version=tokens["version"],
         family=f["family"], mono=f["mono"],
         body=f["size_body"], caption=f["size_caption"],
+        size_display=f.get("size_display", f["size_title"] + 6),
         r_sm=r["sm"], r_md=r["md"], r_lg=r["lg"],
         s_xs=s["xs"], s_sm=s["sm"], s_md=s["md"], s_lg=s["lg"], s_xl=s["xl"],
     )

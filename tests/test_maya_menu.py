@@ -282,36 +282,30 @@ def test_menu_items_view_matches_constant():
     assert any(item["label"] == "---" for item in view)
 
 
-def test_menu_options_switch_on_health_and_spec_scope():
-    """菜单点「场景体检」「规范校验」必须带作用域开关。
+def test_menu_only_exposes_panel_settings_about():
+    """菜单只留三个入口。
 
-    不带的话两者都只跑空作用域：体检的 9 条规则全依赖 metadata.health、
-    规范校验要显式开启 spec_enforcer，结果是点完显示「通过」而一条规则
-    都没跑。这条用例锁的是「菜单入口 = 用户明确要检查」这个语义。
+    场景体检 / 规范校验 / 导出校验不再是独立菜单项 —— 它们成了「场景检查」
+    工具里可勾选的检查项。平铺三个「体检」会让人以为这是三件不同的事，
+    而且点任意一个看到的都是同一张结果表。
     """
-    assert menu._MENU_OPTIONS["rig_health_guard"]["include_builtin"] is True
-    assert menu._MENU_OPTIONS["spec_enforcer"]["spec_enforcer"] is True
+    labels = [label for label, _a, _h in menu.MENU_ITEMS if label]
+    assert labels == ["打开面板", "设置", "关于 TAK"]
+    actions = [action for _l, action, _h in menu.MENU_ITEMS]
+    assert "tak_settings" in actions
+    for removed in ("tak_health_guard", "tak_spec_enforcer", "tak_export_bridge",
+                    "tak_motion_library", "tak_web_panel"):
+        assert removed not in actions
 
 
-def test_run_tool_forwards_menu_options(monkeypatch):
-    """``_run_tool`` 真的把选项交给 run_tool，而不是定义了不用。"""
-    recorded = {}
-
-    class _FakeResult:
-        passed = True
-        report = None
-
-    def _fake_run_tool(tool_id, snapshot=None, **kwargs):
-        recorded[tool_id] = kwargs.get("options")
-        return _FakeResult()
-
+def test_settings_action_is_dispatched(monkeypatch):
+    """「设置」菜单项真的会打开设置面板。"""
+    calls = {}
     fake_qt = ModuleType("tak.ui.qt")
-    fake_qt.show_report = lambda result: None
+    fake_qt.open_settings = lambda dcc="maya", **_kw: calls.setdefault("dcc", dcc)
     monkeypatch.setitem(sys.modules, "tak.ui.qt", fake_qt)
-    monkeypatch.setattr("tak.core.runner.run_tool", _fake_run_tool)
 
-    menu._run_tool("rig_health_guard")
-    menu._run_tool("spec_enforcer")
+    result = menu.dispatch("tak_settings")
 
-    assert recorded["rig_health_guard"] == {"include_builtin": True}
-    assert recorded["spec_enforcer"] == {"spec_enforcer": True}
+    assert result["ok"] is True
+    assert calls["dcc"] == "maya"

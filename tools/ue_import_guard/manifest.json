@@ -6,5 +6,6 @@
   "min_version": { "unreal": "5.8" },
   "entry": "ue_import_guard",
   "ui": "both",
+  "internal": true,
   "permissions": ["scene.read", "import.validate"]
 }

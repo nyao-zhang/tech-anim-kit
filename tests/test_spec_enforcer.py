@@ -183,8 +183,9 @@ def test_manifest_is_valid():
 
 def test_plugin_discovered_for_authoring_dcc_only():
     for dcc in ("maya", "max", "mobu"):
-        assert TOOL_ID in [item["id"] for item in runner.list_tools(dcc=dcc)]
-    assert TOOL_ID not in [item["id"] for item in runner.list_tools(dcc="unreal")]
+        assert TOOL_ID in [item["id"] for item in runner.list_tools(dcc=dcc, include_internal=True)]
+    assert TOOL_ID not in [item["id"] for item in runner.list_tools(
+        dcc="unreal", include_internal=True)]
 
 
 def test_seven_maya_rules_registered_with_explicit_plugin_id(rules_module):

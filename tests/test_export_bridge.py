@@ -105,7 +105,7 @@ def test_manifest_is_valid():
 
 def test_plugin_discovered_for_all_four_dcc():
     for dcc in ("maya", "max", "mobu", "unreal"):
-        assert TOOL_ID in [item["id"] for item in runner.list_tools(dcc=dcc)]
+        assert TOOL_ID in [item["id"] for item in runner.list_tools(dcc=dcc, include_internal=True)]
 
 
 def test_two_maya_export_rules_registered(rules_module):

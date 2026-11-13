@@ -1,0 +1,102 @@
+{
+  "categories": [
+    "全部 · 5",
+    "通用 · 2",
+    "绑定 · 3",
+    "动画 · 2",
+    "管线 · 1",
+    "AI · 3"
+  ],
+  "details": [
+    {
+      "categories": [
+        "ai",
+        "rigging"
+      ],
+      "features": 6,
+      "has_summary": true,
+      "id": "mldeformer_factory",
+      "name": "ML Deformer",
+      "usage": 5
+    },
+    {
+      "categories": [
+        "ai",
+        "animation"
+      ],
+      "features": 6,
+      "has_summary": true,
+      "id": "defect_inspector",
+      "name": "VLM 缺陷检查",
+      "usage": 5
+    },
+    {
+      "categories": [
+        "general",
+        "rigging",
+        "animation"
+      ],
+      "features": 6,
+      "has_summary": true,
+      "id": "qa_inspector",
+      "name": "场景检查",
+      "usage": 4
+    },
+    {
+      "categories": [
+        "ai",
+        "general"
+      ],
+      "features": 6,
+      "has_summary": true,
+      "id": "agent_console",
+      "name": "对话控制台",
+      "usage": 4
+    },
+    {
+      "categories": [
+        "pipeline",
+        "rigging"
+      ],
+      "features": 6,
+      "has_summary": true,
+      "id": "asset_pipeline",
+      "name": "导出 / 导入",
+      "usage": 5
+    }
+  ],
+  "empty_state_ok": true,
+  "has_qt": true,
+  "mode": "gui",
+  "ok": true,
+  "python": "3.11.9",
+  "qapp": true,
+  "qt_binding": "PySide6",
+  "settings_categories": 5,
+  "settings_created": true,
+  "settings_rows": 8,
+  "tool_ui_modules": {
+    "agent_console": "show",
+    "asset_pipeline": "show",
+    "defect_inspector": "missing ui_qt.py",
+    "mldeformer_factory": "show",
+    "qa_inspector": "show"
+  },
+  "tools": [
+    "ML Deformer",
+    "VLM 缺陷检查",
+    "场景检查",
+    "对话控制台",
+    "导出 / 导入"
+  ],
+  "tools_per_category": {
+    "AI · 3": 3,
+    "全部 · 5": 5,
+    "动画 · 2": 2,
+    "管线 · 1": 1,
+    "绑定 · 3": 3,
+    "通用 · 2": 2
+  },
+  "version": "0.4.0",
+  "window_created": true
+}

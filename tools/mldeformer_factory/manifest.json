@@ -1,7 +1,27 @@
 {
   "id": "mldeformer_factory",
-  "name": "ML Deformer 数据工厂",
-  "description": "把骨架快照转成确定性的 ML Deformer 姿态采样计划与内容寻址的数据清单，并按质量门槛（pose 总数、每关节覆盖、重复率、类别完整性、契约一致性）出报告。只产出数据集与门槛结论，不调用任何训练入口——UE 侧 MLDeformerAsset / NeuralMorphModel / DeformerGraphAsset 在 5.7 与 5.8 的 Python 侧均未暴露，能力位 mldeformer.train 恒为 false。零第三方依赖、零 DCC import，同一输入两次运行的清单逐字节相同。",
+  "name": "ML Deformer",
+  "category": ["ai", "rigging"],
+  "summary": "为 ML Deformer 生成姿态采样计划与训练数据集，并按质量门槛判定这份数据是否够训练。",
+  "description": "对齐 Epic ML Deformer 的工作流分成四段：采样（决定要摆哪些 pose）、建集（把每帧的骨骼变换与网格位移落成内容寻址的数据清单）、验质（姿态总数、每关节覆盖、重复率、类别完整性、契约一致性五项门槛）、训练交接（产出 UE 侧可直接消费的数据集与训练参数）。当前版本覆盖前三段与数据集导出；训练本身交给 UE 的 ML Deformer 训练器，因为 UE 5.8 的 Python 侧没有暴露 MLDeformerAsset / NeuralMorphModel 的训练入口。零第三方依赖，同一输入两次运行清单逐字节相同。",
+  "features": [
+    "姿态采样：按骨骼与控制器生成覆盖计划，支持指定采样数与随机种子",
+    "数据集清单：内容寻址（规范化 JSON + sha256），同一输入两次运行逐字节相同",
+    "五项质量门槛：pose 总数、每关节覆盖、重复率、类别完整性、契约一致性",
+    "门槛不通过时给出具体缺哪些 pose、哪个关节覆盖不足",
+    "导出 UE ML Deformer 可消费的数据集与训练参数文件",
+    "完整报告：可直接判断「这份数据能不能训」"
+  ],
+  "usage": [
+    "打开 ML Deformer，先选要采样的骨骼与控制器范围",
+    "设定采样数量与随机种子，生成采样计划并检查覆盖是否均衡",
+    "点「建集」产出数据集与清单，看五项门槛是否全部通过",
+    "不通过时按提示补采样（通常是某个关节或某类极限姿态覆盖不足）",
+    "通过后导出数据集，在 UE 的 ML Deformer 训练器里训练"
+  ],
+  "inputs": ["骨架快照（关节层级与范围）", "采样配置（数量、种子、覆盖要求）"],
+  "outputs": ["采样计划", "内容寻址的数据集清单与数据文件", "质量门槛报告", "UE 训练参数"],
+  "tags": ["ML", "Deformer", "数据集", "采样"],
   "dcc": ["maya", "max", "mobu", "unreal"],
   "min_version": { "maya": "2023", "max": "2023", "mobu": "2023", "unreal": "5.8" },
   "entry": "mldeformer_factory",

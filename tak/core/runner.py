@@ -166,9 +166,67 @@ def load_tool_modules(plugin: Plugin) -> Any:
     return _MODULE_CACHE[key]
 
 
-def list_tools(dcc: Optional[str] = None) -> List[Dict[str, Any]]:
-    """面板用的工具清单（含 manifest 自描述与规则数）。"""
-    return [plugin.to_dict() for plugin in discover(dcc=dcc)]
+def list_tools(dcc: Optional[str] = None,
+               category: Optional[str] = None,
+               include_hidden: bool = False,
+               include_internal: bool = False) -> List[Dict[str, Any]]:
+    """面板用的工具清单。
+
+    在 ``Plugin.to_dict()`` 基础上补两个**运行时**字段：
+
+    * ``categories`` —— 解析用户配置后的最终归类（用户覆盖 > manifest > general）；
+    * ``hidden`` —— 是否被用户在设置面板里隐藏。
+
+    ``category`` 参数传具体分类 id 时按归类过滤，传 ``"all"`` / ``None`` 不过滤。
+    排序优先用配置里的 ``tool_order``，未登记的按显示名排，保证面板顺序稳定。
+
+    ``internal`` 插件（只提供规则、不作为独立入口）默认不出现；设置面板需要
+    看到全部插件时传 ``include_internal=True``。
+    """
+    from tak.core import config as tak_config
+
+    cfg = tak_config.load()
+    hidden = set(cfg.get("hidden_tools") or [])
+    order_map = cfg.get("tool_order") or {}
+
+    items: List[Dict[str, Any]] = []
+    for plugin in discover(dcc=dcc):
+        item = plugin.to_dict()
+        item["categories"] = tak_config.resolve_categories(
+            plugin.category, plugin.id, cfg)
+        item["hidden"] = plugin.id in hidden
+        items.append(item)
+
+    if not include_internal:
+        items = [t for t in items if not t.get("internal")]
+    if not include_hidden:
+        items = [t for t in items if not t["hidden"]]
+    if category and category != tak_config.ALL_VIEW:
+        items = [t for t in items if category in t["categories"]]
+
+    preferred = order_map.get(category or tak_config.ALL_VIEW) or []
+    rank = {tid: index for index, tid in enumerate(preferred)}
+    items.sort(key=lambda t: (rank.get(t["id"], len(rank)), t["name"], t["id"]))
+    return items
+
+
+def list_categories(dcc: Optional[str] = None) -> List[Dict[str, Any]]:
+    """左栏分类列表，带每个分类下的可见工具数（含「全部」视图）。"""
+    from tak.core import config as tak_config
+
+    cfg = tak_config.load()
+    tools = list_tools(dcc=dcc)
+    result: List[Dict[str, Any]] = []
+    for entry in tak_config.categories(cfg):
+        cid = entry["id"]
+        if cid == tak_config.ALL_VIEW:
+            count = len(tools)
+        else:
+            count = sum(1 for t in tools if cid in (t.get("categories") or []))
+        result.append({"id": cid, "name": entry["name"],
+                       "description": entry.get("description", ""),
+                       "count": count})
+    return result
 
 
 def run_tool(tool_id: str,

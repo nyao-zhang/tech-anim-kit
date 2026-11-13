@@ -29,7 +29,7 @@ def _fixture(kind, name):
 
 
 def test_all_batch2_plugins_discoverable():
-    ids = {plugin["id"] for plugin in runner.list_tools()}
+    ids = {plugin["id"] for plugin in runner.list_tools(include_internal=True)}
     assert _EXPECTED_PLUGINS <= ids
     assert "__TEMPLATE_ID__" not in ids
 
@@ -86,11 +86,20 @@ def test_every_plugin_runs_offline(tool_id, dcc):
     assert isinstance(result.render("json"), str)
 
 
-def test_web_api_lists_all_batch2_plugins():
+def test_all_plugins_still_discoverable_including_internal():
+    """五个规则提供者仍然被发现，只是不再作为用户可见工具。"""
+    ids = {plugin["id"] for plugin in runner.list_tools(include_internal=True)}
+    assert _EXPECTED_PLUGINS <= ids
+
+
+def test_web_api_lists_visible_plugins_only():
+    """Web 端工具列表与面板一致：内部规则提供者不出现。"""
     from tak.ui.web import server
     status, payload = server.handle_api("GET", "/api/tools")
     assert status == 200
-    assert _EXPECTED_PLUGINS <= {item["id"] for item in payload["tools"]}
+    ids = {item["id"] for item in payload["tools"]}
+    assert {"qa_inspector", "asset_pipeline"} <= ids
+    assert not (ids & _EXPECTED_PLUGINS)
 
 
 def test_web_api_evaluate_good_and_bad_fixtures():

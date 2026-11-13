@@ -151,7 +151,7 @@ def test_manifest_declares_four_dcc_and_min_versions():
 
 def test_plugin_discovered_for_all_supported_dcc():
     for dcc in ("maya", "max", "mobu", "unreal"):
-        assert TOOL_ID in [item["id"] for item in runner.list_tools(dcc=dcc)]
+        assert TOOL_ID in [item["id"] for item in runner.list_tools(dcc=dcc, include_internal=True)]
 
 
 def test_nine_maya_rules_registered_with_explicit_plugin_id():

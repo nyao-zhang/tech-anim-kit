@@ -6,5 +6,6 @@
   "min_version": { "unreal": "5.8" },
   "entry": "ik_retarget_guard",
   "ui": "both",
+  "internal": true,
   "permissions": ["scene.read"]
 }

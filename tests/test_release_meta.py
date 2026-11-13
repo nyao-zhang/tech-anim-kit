@@ -22,7 +22,7 @@ from tak.version import SCHEMA_VERSION, __version__
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PLUGIN_ROOT = os.path.join(ROOT, "tools")
-EXPECTED_PLUGIN_COUNT = 11
+EXPECTED_PLUGIN_COUNT = 10
 KNOWN_DCCS = {"maya", "max", "mobu", "unreal"}
 
 
@@ -137,8 +137,7 @@ def test_min_version_keys_are_subset_of_dcc():
 
 def test_ai_plugins_do_not_register_global_rules():
     """AI 类插件不得带 rules 字段：否则会污染 40 个 fixtures 的判定基线。"""
-    ai_plugins = ("agent_console", "skeleton_mapper", "defect_inspector",
-                  "rig_kb", "motion_library", "mldeformer_factory")
+    ai_plugins = ("agent_console", "defect_inspector", "mldeformer_factory")
     for name, path in _plugin_dirs():
         manifest = _manifest(path)
         if name in ai_plugins:

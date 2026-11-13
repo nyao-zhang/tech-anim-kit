@@ -1,0 +1,30 @@
+{
+  "id": "asset_pipeline",
+  "name": "导出 / 导入",
+  "category": ["pipeline", "rigging"],
+  "summary": "选内容、选目标、导到文件或缓存位；在另一个 DCC 用同一个 profile 打开并做导入校验。",
+  "description": "把导出与导入收成一个对称工具。导出侧决定「导什么」（完整绑定 / 仅骨骼 / 仅蒙皮网格 / 动画缓存 / 仅控制器）与「导到哪」（Maya / 3ds Max / MotionBuilder / UE / 通用）；导入侧读同一份 profile 与缓存位文件做一致性校验，字段级差异会指出是哪一项对不上。",
+  "features": [
+    "五种预设：完整绑定、仅骨骼、仅蒙皮网格、动画缓存、仅控制器，也可逐项自定义",
+    "目标 DCC / 引擎决定可用格式与默认选项，避免导出目标打不开的 FBX",
+    "支持导出到文件，或导出到跨 DCC 共享缓存位（TAK_CACHE_DIR）",
+    "profile 可命名保存，导出端与导入端读同一份，不靠口头约定",
+    "导出前自动跑一致性预检（材质、引用、骨骼数量、命名合法性）",
+    "导入侧比对 sidecar 与导入后快照，给出字段级差异"
+  ],
+  "usage": [
+    "选一个预设（例如「完整绑定」），或手动勾选要导出的内容",
+    "选目标 DCC / 引擎，格式会自动收敛到该目标支持的集合",
+    "选路径，或勾「导出到缓存位」把文件放到跨 DCC 共享目录",
+    "点「预检」看问题清单，确认后点「导出」",
+    "到目标 DCC 里打开本工具，选同一 profile、指向缓存位文件，点「导入校验」"
+  ],
+  "inputs": ["当前场景快照", "导出 profile（可选，存在命名 profile 时读取）", "导出后 sidecar"],
+  "outputs": ["导出文件（FBX / USD / MA / ABC）", "sidecar 清单", "一致性校验报告"],
+  "tags": ["导出", "导入", "FBX", "USD", "缓存"],
+  "dcc": ["maya", "max", "mobu", "unreal"],
+  "min_version": { "maya": "2023", "max": "2023", "mobu": "2023", "unreal": "5.8" },
+  "entry": "asset_pipeline",
+  "ui": "qt",
+  "permissions": ["scene.read", "export.fbx", "import.validate"]
+}

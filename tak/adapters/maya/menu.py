@@ -39,13 +39,14 @@ _MAIN_WINDOW_CANDIDATES = ("MayaWindow", "mayaMainWindow")
 
 # (菜单项显示名, 动作标识, 中文说明)。动作标识由 ``_dispatch`` 解析，
 # 不直接内联代码：菜单项只传标识，避免把执行逻辑塞进 Maya 的 command 字符串。
+#
+# v0.4.0 起菜单只保留三个入口：面板、设置、关于。
+# 场景体检 / 规范校验 / 导出校验不再是独立菜单项 —— 它们是「场景检查」工具内部
+# 可勾选的检查项；在菜单上平铺三个「体检」会让人以为这是三件不同的事，
+# 也导致用户点任意一个都看到同一张结果表。
 MENU_ITEMS: Tuple[Tuple[str, str, str], ...] = (
     ("打开面板", "tak_launch_qt", "打开 TAK Qt 主面板"),
-    ("场景体检", "tak_health_guard", "运行 Rig Health Guard"),
-    ("规范校验", "tak_spec_enforcer", "运行 Spec Enforcer"),
-    ("导出校验", "tak_export_bridge", "运行 Export Bridge 预检"),
-    ("动作检索", "tak_motion_library", "打开 Web 动作检索面板"),
-    ("Web 面板", "tak_web_panel", "启动本地 Web 面板"),
+    ("设置", "tak_settings", "分类管理、工具归类、第三方插件导入"),
     (None, "tak_separator", ""),
     ("关于 TAK", "tak_about", "版本与仓库路径"),
 )
@@ -182,21 +183,13 @@ def dispatch(action: str) -> Any:
     """菜单项动作分发；无宿主 / 缺工具时打印一行说明而不是抛异常。
 
     这里是唯一会把用户操作接进工具链的地方，因此每一步都单独兜底：
-    打开面板失败不该阻止用户运行体检，反之亦然。
+    打开面板失败不该阻止用户进设置，反之亦然。
     """
     action = str(action or "")
     if action == "tak_launch_qt":
         return _safe_call(_launch_panel, action)
-    if action == "tak_health_guard":
-        return _safe_call(lambda: _run_tool("rig_health_guard"), action)
-    if action == "tak_spec_enforcer":
-        return _safe_call(lambda: _run_tool("spec_enforcer"), action)
-    if action == "tak_export_bridge":
-        return _safe_call(lambda: _run_tool("export_bridge"), action)
-    if action == "tak_motion_library":
-        return _safe_call(_open_web_panel, action, "motion")
-    if action == "tak_web_panel":
-        return _safe_call(_open_web_panel, action)
+    if action == "tak_settings":
+        return _safe_call(_launch_settings, action)
     if action == "tak_about":
         return _safe_call(_about, action)
     return {"ok": False, "action": action, "reason": "未知菜单动作"}
@@ -221,36 +214,17 @@ def _launch_panel(dcc: str = "maya") -> Any:
     return launch(dcc)
 
 
-def _run_tool(tool_id: str) -> Any:
-    """在 Maya 内跑一个工具：取当前场景快照 → 走统一运行契约 → 弹面板。"""
-    from tak.core.runner import adapter_for, run_tool
-    from tak.ui.qt import show_report
-
-    adapter = adapter_for("maya")
-    snapshot = adapter.get_skeleton_snapshot()
-    # 菜单点击 = 用户明确要检查这一项，因此必须传对应开关：
-    # 体检要连内置规范规则一起跑；规范校验要显式开启作用域。
-    # 不传的话两者都只跑「空作用域」，点完看到「通过」但什么都没检查。
-    options = _MENU_OPTIONS.get(tool_id)
-    result = run_tool(tool_id, snapshot, dcc="maya", adapter=adapter,
-                      options=dict(options) if options else None)
-    show_report(result)
-    return {"ok": bool(getattr(result, "passed", False)),
-            "tool_id": tool_id,
-            "findings": len(getattr(result, "report", None).findings
-                            if getattr(result, "report", None) else [])}
-
-
-#: 菜单入口的默认选项。放在模块级，便于测试直接核对而不必模拟整条点击链路。
-_MENU_OPTIONS: Dict[str, Dict[str, Any]] = {
-    "rig_health_guard": {"include_builtin": True},
-    "spec_enforcer": {"spec_enforcer": True},
-}
+def _launch_settings(dcc: str = "maya") -> Any:
+    from tak.ui.qt import open_settings
+    return open_settings(dcc)
 
 
 def _open_web_panel(tab: str = "") -> Any:
-    """启动本地 Web 面板（阻塞式服务器，放在后台线程里跑）。"""
-    import threading
+    """启动本地 Web 面板（阻塞式服务器，放在后台线程里跑）。
+
+    菜单已不再暴露这个入口：Web 端的定位收窄为「只读报告看板」，
+    由面板 / 设置里的按钮按需启动，不再作为工具入口。
+    """
     from tak.ui.web.server import serve_in_thread
 
     return serve_in_thread(tab=tab)

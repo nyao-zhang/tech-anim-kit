@@ -485,7 +485,16 @@ class StatusBar(_StatusBarBase):
 # 主窗口
 # --------------------------------------------------------------------------- #
 class ToolMainWindow(_MainWindowBase):
-    """TAK 主窗口：左侧插件列表 + 工具卡片 + 结果/差异/日志标签页 + 状态栏。"""
+    """TAK 主窗口：左侧「分类 → 工具」两级导航 + 右侧详情 / 结果 / 日志。
+
+    与 v0.3 的区别（这是用户反馈里最关键的一条）：老版左侧平铺全部插件、
+    右侧只有一张卡片加一个「运行」按钮，任何工具点下去都是同一张体检结果表，
+    用户无法分辨工具之间的差异。现在：
+
+    * 左栏先按分类过滤（全部 / 通用 / 绑定 / 动画 / 管线 / AI，分类可由用户增删改）；
+    * 选中工具后右侧渲染 manifest 自描述的「作用 / 功能 / 怎么用 / 输入输出」；
+    * 「打开工具界面」调该工具自己的 ``ui_qt.show()``，「快速运行」走通用契约。
+    """
 
     def __init__(self, dcc: str = "maya", parent: Any = None,
                  theme: str = "dark") -> None:
@@ -498,12 +507,14 @@ class ToolMainWindow(_MainWindowBase):
         self.dcc = str(dcc or "maya")
         self._theme = "dark"
         self._tools: List[Dict[str, Any]] = []
+        self._categories: List[Dict[str, Any]] = []
         self._current_tool_id = ""
+        self._current_category = "all"
 
         self.setObjectName("takMainWindow")
         self.setWindowTitle("TAK 技术动画工具集 · %s" % self.dcc)
-        self.resize(1180, 760)
-        self.setMinimumSize(920, 600)
+        self.resize(1260, 820)
+        self.setMinimumSize(980, 640)
         self._build_ui()
         self.set_theme(theme)
         self.reload_tools()
@@ -515,31 +526,48 @@ class ToolMainWindow(_MainWindowBase):
         outer.setContentsMargins(16, 16, 16, 16)
         outer.setSpacing(14)
 
-        # 左侧插件列表
+        # ---------------- 左栏：分类 + 工具 ----------------
         sidebar = QtWidgets.QFrame()
         sidebar.setProperty("takCard", "true")
-        sidebar.setFixedWidth(250)
+        sidebar.setFixedWidth(248)
         side_layout = QtWidgets.QVBoxLayout(sidebar)
-        side_layout.setContentsMargins(14, 14, 14, 14)
-        side_layout.setSpacing(8)
-        side_title = QtWidgets.QLabel("工具插件")
-        side_font = side_title.font()
-        side_font.setBold(True)
-        side_title.setFont(side_font)
+        side_layout.setContentsMargins(12, 12, 12, 12)
+        side_layout.setSpacing(6)
+
+        cat_title = QtWidgets.QLabel("分类")
+        cat_font = cat_title.font()
+        cat_font.setBold(True)
+        cat_title.setFont(cat_font)
+        self.category_list = QtWidgets.QListWidget()
+        self.category_list.setObjectName("takCategoryList")
+        self.category_list.setSpacing(1)
+        self.category_list.setMaximumHeight(196)
+        self.category_list.currentRowChanged.connect(self._on_category_selected)
+
+        tool_title = QtWidgets.QLabel("工具")
+        tool_title.setFont(cat_font)
         self.tool_list = QtWidgets.QListWidget()
         self.tool_list.setSpacing(2)
-        self.tool_list.setMinimumWidth(210)
         self.tool_list.currentRowChanged.connect(self._on_tool_selected)
-        side_hint = QtWidgets.QLabel("插件放入 tools/ 后自动出现")
+
+        side_hint = QtWidgets.QLabel("在设置面板里可以改分类、导入第三方工具")
         side_hint.setProperty("takHint", "true")
         side_hint.setWordWrap(True)
-        side_layout.addWidget(side_title)
+        self.settings_button = QtWidgets.QPushButton("设置")
+        self.settings_button.setProperty("takGhost", "true")
+        self.settings_button.clicked.connect(self.open_settings)
+
+        side_layout.addWidget(cat_title)
+        side_layout.addWidget(self.category_list, 0)
+        side_layout.addSpacing(4)
+        side_layout.addWidget(tool_title)
         side_layout.addWidget(self.tool_list, 1)
         side_layout.addWidget(side_hint)
+        side_layout.addWidget(self.settings_button, 0)
 
-        # 右侧主区
+        # ---------------- 右栏：标题 + 页签 ----------------
         main = QtWidgets.QVBoxLayout()
-        main.setSpacing(12)
+        main.setSpacing(10)
         header = QtWidgets.QHBoxLayout()
         header.setSpacing(8)
         title_box = QtWidgets.QVBoxLayout()
@@ -547,7 +575,7 @@ class ToolMainWindow(_MainWindowBase):
         main_title = QtWidgets.QLabel("TAK 技术动画工具集")
         main_font = main_title.font()
         main_font.setBold(True)
-        main_font.setPointSize(main_font.pointSize() + 5)
+        main_font.setPointSize(main_font.pointSize() + 4)
         main_title.setFont(main_font)
         subtitle = QtWidgets.QLabel("DCC %s · Qt %s · 统一快照 / 规则 / 报告"
                                     % (self.dcc, QT_BINDING))
@@ -555,11 +583,14 @@ class ToolMainWindow(_MainWindowBase):
         title_box.addWidget(main_title)
         title_box.addWidget(subtitle)
         self.theme_button = QtWidgets.QPushButton("切换主题")
+        self.theme_button.setProperty("takGhost", "true")
         self.theme_button.clicked.connect(self.toggle_theme)
         header.addLayout(title_box, 1)
         header.addWidget(self.theme_button, 0)
 
-        self.tool_card = ToolCard(on_run=self._on_run_requested, parent=self)
+        from .detail import ToolDetailPanel
+        self.detail_panel = ToolDetailPanel(on_open=self.open_tool,
+                                            on_run=self.run_tool, parent=self)
         self.result_table = ResultTable(self)
         self.diff_preview = DiffPreview(self)
         self.log_console = LogConsole(self)
@@ -570,8 +601,8 @@ class ToolMainWindow(_MainWindowBase):
         log_layout.addWidget(self.log_console)
         self.tabs = QtWidgets.QTabWidget()
         self.tabs.setDocumentMode(True)
+        self.tabs.addTab(self.detail_panel, "详情")
         self.tabs.addTab(self.result_table, "结果")
-        self.tabs.addTab(self.diff_preview, "差异")
         self.tabs.addTab(self.log_page, "日志")
         # 原生 QTabBar 的选中页由系统样式绘制，会和 QSS 主题撞色；
         # 这里隐藏原生 tab bar，用受 QSS 控制的按钮做页签，tab 内容仍由 QTabWidget 管理。
@@ -581,7 +612,7 @@ class ToolMainWindow(_MainWindowBase):
         tab_nav_layout = QtWidgets.QHBoxLayout(tab_nav)
         tab_nav_layout.setContentsMargins(0, 0, 0, 0)
         tab_nav_layout.setSpacing(6)
-        for index, label in enumerate(("结果", "差异", "日志")):
+        for index, label in enumerate(("详情", "结果", "日志")):
             button = QtWidgets.QPushButton(label)
             button.setMinimumWidth(86)
             button.clicked.connect(lambda _checked=False, i=index: self._switch_tab(i))
@@ -590,7 +621,6 @@ class ToolMainWindow(_MainWindowBase):
         tab_nav_layout.addStretch(1)
 
         main.addLayout(header)
-        main.addWidget(self.tool_card, 0)
         main.addWidget(tab_nav, 0)
         main.addWidget(self.tabs, 1)
         outer.addWidget(sidebar, 0)
@@ -639,38 +669,99 @@ class ToolMainWindow(_MainWindowBase):
         self.log_console.append("主题切换为 %s" % self._theme, "info")
         return self._theme
 
-    # ------------------------------------------------------------ 工具列表
+    # ------------------------------------------------------------ 分类与工具列表
     def reload_tools(self) -> List[Dict[str, Any]]:
+        """重新读分类与工具；保留当前分类选择（不存在则回落到「全部」）。"""
         if not HAS_QT:
             return []
         try:
-            self._tools = list(self._runner.list_tools(dcc=self.dcc) or [])
+            self._categories = list(self._runner.list_categories(dcc=self.dcc) or [])
+        except Exception as exc:
+            self._categories = []
+            self.log_console.append("分类读取失败: %s: %s"
+                                    % (type(exc).__name__, exc), "error")
+
+        previous = self._current_category
+        self.category_list.blockSignals(True)
+        self.category_list.clear()
+        target_row = 0
+        for row, cat in enumerate(self._categories):
+            item = QtWidgets.QListWidgetItem("%s · %d" % (cat.get("name") or cat.get("id"),
+                                                          int(cat.get("count") or 0)))
+            item.setToolTip(str(cat.get("description") or ""))
+            item.setData(QtCore.Qt.UserRole, str(cat.get("id") or ""))
+            self.category_list.addItem(item)
+            if str(cat.get("id")) == previous:
+                target_row = row
+        self.category_list.blockSignals(False)
+        if self._categories:
+            self.category_list.setCurrentRow(target_row)
+            self._current_category = str(
+                self._categories[target_row].get("id") or "all")
+        else:
+            self._current_category = "all"
+
+        self._refresh_tool_list()
+        return list(self._tools)
+
+    def _on_category_selected(self, row: int) -> None:
+        if not HAS_QT or row < 0 or row >= len(self._categories):
+            return
+        self._current_category = str(self._categories[row].get("id") or "all")
+        self._refresh_tool_list()
+
+    def _refresh_tool_list(self) -> None:
+        """按当前分类拉取工具并重填列表。"""
+        if not HAS_QT:
+            return
+        try:
+            self._tools = list(self._runner.list_tools(
+                dcc=self.dcc, category=self._current_category) or [])
         except Exception as exc:
             self._tools = []
-            self.log_console.append("插件发现失败: %s: %s" % (type(exc).__name__, exc), "error")
+            self.log_console.append("插件发现失败: %s: %s"
+                                    % (type(exc).__name__, exc), "error")
         self.tool_list.blockSignals(True)
         self.tool_list.clear()
         for tool in self._tools:
             item = QtWidgets.QListWidgetItem(str(tool.get("name") or tool.get("id") or "未命名"))
-            item.setToolTip(str(tool.get("description") or ""))
+            tip = str(tool.get("summary") or tool.get("description") or "")
+            item.setToolTip(tip)
             item.setData(QtCore.Qt.UserRole, str(tool.get("id") or ""))
             self.tool_list.addItem(item)
         self.tool_list.blockSignals(False)
+
+        try:
+            names = {c["id"]: c["name"] for c in self._categories}
+        except Exception:
+            names = {}
+        self.detail_panel.set_category_names(names)
+
         if self._tools:
             self.tool_list.setCurrentRow(0)
             self._on_tool_selected(0)
         else:
-            self.tool_card.set_tool("暂无工具", "把插件目录放入 tools/ 或设置 TAK_PLUGIN_PATH。",
-                                    hint="", tool_id="")
-            self.log_console.append("未发现可用工具插件。", "warning")
-        return list(self._tools)
+            self._current_tool_id = ""
+            self.detail_panel.set_tool(None)
+            self.log_console.append("当前分类下没有可用工具。", "warning")
 
     def select_tool(self, tool_id: str) -> bool:
+        """选中指定工具；不在当前分类时先切回「全部」。"""
         target = str(tool_id or "")
         for row, tool in enumerate(self._tools):
             if str(tool.get("id")) == target:
                 self.tool_list.setCurrentRow(row)
                 return True
+        # 目标工具不在当前分类下：切到「全部」再找，保证外部调用（菜单、启动器）
+        # 传 tool_id 时一定能定位到，而不是静默失败。
+        if self._categories:
+            self.category_list.setCurrentRow(0)
+            self._current_category = "all"
+            self._refresh_tool_list()
+            for row, tool in enumerate(self._tools):
+                if str(tool.get("id")) == target:
+                    self.tool_list.setCurrentRow(row)
+                    return True
         return False
 
     def _on_tool_selected(self, row: int) -> None:
@@ -678,10 +769,40 @@ class ToolMainWindow(_MainWindowBase):
             return
         tool = self._tools[row]
         self._current_tool_id = str(tool.get("id") or "")
-        self.tool_card.set_tool(str(tool.get("name") or self._current_tool_id),
-                                str(tool.get("description") or ""),
-                                hint="DCC %s · %s" % (self.dcc, self._current_tool_id),
-                                tool_id=self._current_tool_id)
+        self.detail_panel.set_tool(tool)
+        self.status_bar.set_status("已选择 %s" % self._current_tool_id)
+
+    # ------------------------------------------------------------ 打开工具界面
+    def open_tool(self, tool_id: Optional[str] = None) -> Any:
+        """打开该工具自己的界面；没有自带界面时回退到通用运行。
+
+        这是「每个工具有一个单独 UI」的落地点：面板不再把所有工具渲染成
+        同一张结果表，而是把控制权交回插件自己的 ``ui_qt.show()``。
+        """
+        if not HAS_QT:
+            return None
+        target = str(tool_id or self._current_tool_id or "")
+        if not target:
+            self.log_console.append("没有选中任何工具。", "warning")
+            return None
+        from .launcher import open_tool as _open_tool
+        self.detail_panel.set_status("正在打开 %s ..." % target)
+        window = _open_tool(target, dcc=self.dcc)
+        if window is None:
+            self.detail_panel.set_status("该工具没有可用界面，已尝试通用运行。", "warning")
+            self.log_console.append("工具 %s 没有独立界面，已回退通用运行。" % target,
+                                    "warning")
+        else:
+            self.detail_panel.set_status("已打开 %s" % target)
+            self.log_console.append("打开工具界面：%s" % target, "info")
+        return window
+
+    def open_settings(self) -> Any:
+        """打开设置面板（分类管理 / 第三方工具导入 / 配置路径）。"""
+        if not HAS_QT:
+            return None
+        from .launcher import open_settings as _open_settings
+        return _open_settings(self.dcc, on_saved=self.reload_tools)
 
     # ------------------------------------------------------------ 运行
     def _on_run_requested(self, tool_id: str) -> None:
@@ -726,7 +847,8 @@ class ToolMainWindow(_MainWindowBase):
                 summary = ""
         self.status_bar.set_status("完成：%s%s" % (target, (" · " + summary) if summary else ""))
         self.status_bar.set_elapsed(getattr(result, "duration_ms", 0.0))
-        self._switch_tab(0)
+        self._switch_tab(1)
+        self.detail_panel.set_status("上次运行 %s：%s" % (target, summary or "无异常"))
         self.log_console.append("运行 %s 完成，%s" % (target, summary or "无异常"), "info")
         return result
 

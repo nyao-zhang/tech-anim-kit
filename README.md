@@ -2,7 +2,9 @@
 
 跨 DCC 技术动画工具集，面向 **Maya 2023+ / 3ds Max 2023+ / MotionBuilder 2023+ / Unreal Engine 5.8–5.9**。
 
-> 当前版本 `0.3.3`（**P0 – P6 已完成**，即批次 1–4）。核心层零 DCC 依赖，**1214 个测试全绿、`tak.core` 覆盖率 88.97%**；十一个工具插件、四端适配器、Qt 与 Web 面板、AI 工作台（Agent Console / Skeleton Mapper / VLM 缺陷诊断 / 绑定知识库 RAG）、动作语义检索、ML Deformer 数据集工厂、一条命令安装器均已落地。Maya 2023/2024/2026 与 UE 5.8.4 真机验证，**四端一致性回归 PASS**。详见 [变更日志](CHANGELOG.md) 与 [批次 4 交付报告](docs/BATCH4_REPORT.md)。
+> 当前版本 `0.4.0`（**P7 信息架构重构**）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
+>
+> v0.4.0 的变化集中在**面板**：工具从 11 个精简为 5 个并按分类组织，每个工具有自己的界面，选中后右侧显示作用 / 功能 / 用法，菜单只留「打开面板 / 设置 / 关于」。详见 [变更日志](CHANGELOG.md) 第 0.4.0 节。
 
 ## 设计原则
 
@@ -17,13 +19,13 @@
 
 ```bash
 pip install pytest pytest-cov
-python -m pytest -q                                   # 1214 tests
+python -m pytest -q                                   # 全量用例
 python -m pytest --cov=tak.core --cov-fail-under=80 -q  # 核心层硬门槛（当前 90%）
 python validation/py_compat_smoke.py                   # 跨版本冒烟：无需 pytest / 无需 DCC
 python tak/ui/generate_theme.py --check                # CI：生成物未漂移
 python fixtures/generate_fixtures.py --check           # 40 个 golden fixtures 可复现
 python validation/four_dcc_regression.py               # 四端一致性回归（maya/max/mobu/unreal）
-python tools/new_tool.py --list                        # 列出 11 个已发现插件
+python tools/new_tool.py --list                        # 列出已发现插件
 python tools/new_tool.py my_tool --name "我的工具"       # 一键生成新插件
 ```
 
@@ -45,16 +47,17 @@ python -m tak.install --uninstall --apply --dcc maya   # 精确移除自己的�
 from tak.core.runner import run_tool, evaluate, list_tools
 from tak.adapters.base import NullAdapter
 
-result = run_tool("rig_health_guard", snapshot, dcc="maya",
-                  adapter=NullAdapter(), options={"include_builtin": True})
+result = run_tool("qa_inspector", snapshot, dcc="maya",
+                  adapter=NullAdapter(), options={"checks": ["naming.joint_pattern"]})
 print(result.passed, result.render("md"))
 ```
 
 打开面板：
 
 ```bash
-python -m tak.ui.web.server --port 8765       # 浏览器 / UE 内嵌浏览器，含 AI 工作台四页签
 python -c "from tak.ui.qt import launch; launch('maya')"   # Maya / Max / MoBu 内
+python -c "from tak.ui.qt import open_settings; open_settings('maya')"
+python -m tak.ui.web.server --port 8765       # 只读报告看板（跨人分享 / 离线回看）
 ```
 
 真机验证（需本机安装引擎）：
@@ -64,27 +67,33 @@ python -c "from tak.ui.qt import launch; launch('maya')"   # Maya / Max / MoBu �
 python validation/run_probe.py --script ue_adapter_probe.py
 ```
 
-## 十一个工具插件
+## 五个工具 + 五个规则提供者
 
-| 插件 | DCC | 作用 |
+面板里只有五个工具，每个都有自己的独立界面：
+
+| 工具 | 分类 | 作用 | 文档 |
+|---|---|---|---|
+| 场景检查 `qa_inspector` | 通用 / 绑定 / 动画 | 37 个检查项按六组摊开，勾选后一次跑完；勾选保存在 `~/.tak/config.json` | [qa_inspector](docs/modules/qa_inspector.md) |
+| 导出 / 导入 `asset_pipeline` | 管线 / 绑定 | 选内容（完整绑定 / 仅骨骼 / 仅蒙皮 / 动画缓存 / 仅控制器）与目标（Maya / Max / MoBu / UE / 通用），导到文件或跨 DCC 缓存位，另一侧用同一 profile 做导入校验 | [asset_pipeline](docs/modules/asset_pipeline.md) |
+| ML Deformer `mldeformer_factory` | AI / 绑定 | 姿态采样计划 + 内容寻址数据集 + 五项质量门槛；训练交给 UE 的 ML Deformer 训练器 | [mldeformer_factory](docs/modules/mldeformer_factory.md) |
+| VLM 缺陷检查 `defect_inspector` | AI / 动画 | 抽帧图片序列 → 视觉模型给候选 → 确定性过滤 → 帧号 / 类别 / 骨骼 / 置信度清单 | [defect_inspector](docs/modules/defect_inspector.md) |
+| 对话控制台 `agent_console` | AI / 通用 | 一句话问场景，判定走规则引擎；修复计划过白名单 → dry-run → 权限 → 二次确认 → undo | [agent_console](docs/modules/agent_console.md) |
+
+另有两个内置界面：**设置**（分类增删改、工具归类、第三方插件导入、配置目录）与**关于**。两者都在菜单里，也在面板左下角。
+
+还有五个插件在跑但不占工具位 —— 它们的 `manifest.json` 标了 `"internal": true`，是**规则提供者**：
+
+| 插件 | 现在是什么 | 文档 |
 |---|---|---|
-| `rig_health_guard` | 四端 | 场景体检：9 条 Maya 专项规则 + 保存/导出前钩子 + 只读 AI 解释层；`include_builtin=True` 时连同 19 条内置规范规则一起跑 |
-| `spec_enforcer` | Maya/Max/MoBu | 7 条规范规则；4 个受限 DSL 动作（重命名、上色、权重归一化、命名空间），全部走 dry-run → 确认 → undo；Maya 侧四个写方法已落到真实 API |
-| `export_bridge` | 四端 | 导出前后骨架快照 diff，9 类偏差按阈值阻断；写 sidecar JSON 供 UE 侧校验 |
-| `ue_import_guard` | UE | 9 条 UE 资产规则（Skeleton 兼容、根运动、压缩、曲线、材质槽、LOD、sidecar 不匹配）+ 导入校验 |
-| `ik_retarget_guard` | UE | 6 条 IK Retargeter 链规则；离线骨骼语义映射词典与 mapping asset（v1.0，供 Skeleton Mapper 消费） |
-| `agent_console` | 四端 | 对话式控制台：意图分类走确定性关键词路由，判定走规则引擎；`chat` 绝不写场景，`confirm` 才走白名单 → dry-run → 权限 → 二次确认 → undo → 失败整体回滚 |
-| `skeleton_mapper` | 四端 | UE Mannequin / Mixamo / 3ds Max Biped 三套命名的确定性骨骼语义映射；一对多、多对一冲突与低置信度项**绝不自动选择** |
-| `defect_inspector` | 四端 | Playblast / UE 录屏抽帧的 VLM 缺陷候选诊断（8 类缺陷），AI 只出候选，经确定性过滤后输出待人工复核的帧号/类别/置信度 |
-| `rig_kb` | 四端 | 本地离线 BM25 片段检索：`knowledge/*.md` 五篇种子文档，返回带 `doc_id/title/section/excerpt/citation` 的命中，供 Agent Console 注入上下文 |
-| `motion_library` | 四端 | 动作资产语义检索：BM25 文本分 + 类型加权 + 硬过滤（时长/可循环/根位移/骨骼），12 个内置 clip，**不解析 FBX 二进制** |
-| `mldeformer_factory` | 四端 | ML Deformer 数据集工厂：确定性姿态采样计划 + 内容寻址清单 + 8 条质量门槛；**不调用任何训练入口** |
+| `rig_health_guard` | 「场景卫生」组 9 条规则 | [rig_health_guard](docs/modules/rig_health_guard.md) |
+| `spec_enforcer` | 「绑定规范」组 7 条规则 | [spec_enforcer](docs/modules/spec_enforcer.md) |
+| `ik_retarget_guard` | 「IK / 重定向」组的规则 | [ik_retarget_guard](docs/modules/ik_retarget_guard.md) |
+| `export_bridge` | 「导出前置」组 2 条规则 + 导出预检实现 | [export_bridge](docs/modules/export_bridge.md) |
+| `ue_import_guard` | 「导入后校验」组的规则 + 导入一致性实现 | [ue_import_guard](docs/modules/ue_import_guard.md) |
 
+每个工具的完整说明——输入参数、输出字段、检查项清单、可直接复制的用法、能做什么与不做什么——见 **[docs/MODULES.md](docs/MODULES.md)**，按模块分文件放在 `docs/modules/`。
 
-每个插件的完整说明——输入参数、输出字段、规则清单、可直接复制的用法、能做什么与不做什么——见 **[docs/MODULES.md](docs/MODULES.md)**，按模块分文件放在 `docs/modules/`。不知道该从哪个开始的话，查那份总览的第 2 节「按任务找工具」。
-
-全部插件共 **33 条确定性规则 + 19 条内置规则**，判定只读快照与规范；六个 AI 类插件（`agent_console` / `skeleton_mapper` / `defect_inspector` / `rig_kb` / `motion_library` / `mldeformer_factory`）**不注册任何全局 `@rule`**，AI 只产出候选与解释。
-
+Maya 下共 **37 个检查项**（19 条内置规范 + 18 条来自规则提供者）；具体数量随 DCC 与进程内已加载插件变化，`qa_inspector` 的 `checks_available` 会实时反映。判定只读快照与规范，AI 类工具（`agent_console` / `defect_inspector` / `mldeformer_factory`）**不注册任何全局 `@rule`**，只产出候选与解释。
 
 ## 目录结构
 
@@ -95,22 +104,21 @@ python validation/run_probe.py --script ue_adapter_probe.py
 | `tak/core/rules/` | 规则基类与 `@rule`；`builtin.py` 19 条内置规则、`engine.py` 执行引擎 |
 | `tak/core/runner.py` | **统一运行契约**：`run_tool` / `evaluate` / `list_tools` / `adapter_for` |
 | `tak/core/registry.py` | 扫描 `tools/*/manifest.json` 动态发现插件，支持 `TAK_PLUGIN_PATH` 外部目录 |
+| `tak/core/config.py` | 用户配置 `~/.tak/config.json`：分类、工具归类、隐藏、检查项勾选、导出 profile |
 | `tak/core/dsl/` | 受限动作注册表与安全执行器（参数校验、原子批次、dry-run、回滚） |
 | `tak/core/report/` | 统一报告模型，输出 JSON / Markdown / HTML，支持 severity 过滤 |
 | `tak/core/diff/` | `SkeletonSnapshot`：导出前后骨架层级、命名、bind pose、单位轴向 diff |
 | `tak/core/ai/` | OpenAI 兼容 HTTP、重试与预算统计、确定性离线 mock、三档模型路由 |
 | `tak/core/agent/` | 对话式控制台内核：`AgentSession`（chat / propose / confirm / audit）、确定性意图分类 |
-| `tak/core/mapping/` | 骨骼语义映射内核：三套命名体系的确定性双向匹配与冲突判定 |
 | `tak/core/vision/` | 抽帧缺陷诊断内核：帧归一化、候选校验、`inspect_frames`、8 类缺陷分类 |
 | `tak/core/knowledge/` | 离线 BM25 检索内核：`KnowledgeBase.search/context_for/citations`、中英混合分词、分块 |
-| `tak/core/motion/` | 动作语义检索内核：特征提取、BM25 + 类型加权 + 硬过滤、`similar_to`、索引序列化 |
 | `tak/core/mldeformer/` | 数据集工厂内核：确定性姿态采样、内容寻址清单、8 条质量门槛 |
 | `tak/core/mocks/` | 四套可注入的假 DCC 模块，安装与卸载完全可逆 |
 | `tak/adapters/` | `base.py` 抽象接口 + `snapshot_utils.py` / `conformance.py` 共享基线 + 四端适配器（maya / max / mobu / unreal，各含 adapter + menu + init） |
 | `tak/install/` | 一条命令安装器：四端探测、标记块幂等写入、备份、精确卸载、CLI |
 | `tak/compat/` | PySide2→PySide6 兼容层、UE API 降级探测 |
-| `tak/ui/` | 设计 token、`theme.qss`/`theme_light.qss`/`theme.css`、`qt/` 组件库、`web/` 面板（AI 工作台五页签）与 HTTP 服务 |
-| `tools/` | 11 个工具插件 + `_template/` 模板 + `new_tool.py` 脚手架 |
+| `tak/ui/` | 设计 token、`theme.qss`/`theme_light.qss`/`theme.css`、`qt/`（主面板 / 详情面板 / 设置面板）、`web/` 只读报告看板 |
+| `tools/` | 10 个插件（5 个工具 + 5 个内部规则提供者）+ `_template/` + `new_tool.py` |
 | `knowledge/` | 5 篇绑定知识库种子文档（命名、权重、FBX/UE 流水线、IK 重定向、DCC 差异） |
 | `fixtures/` | 20 好 + 20 坏骨架快照，判定器回归基线 |
 | `tests/` | 39 个测试模块 / 1214 个用例 |

@@ -6,5 +6,6 @@
   "min_version": { "maya": "2023", "max": "2023", "mobu": "2023", "unreal": "5.8" },
   "entry": "export_bridge",
   "ui": "qt",
+  "internal": true,
   "permissions": ["scene.read", "export.fbx"]
 }

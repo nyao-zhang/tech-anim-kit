@@ -23,6 +23,25 @@ _VALID_DCC = {"maya", "max", "mobu", "unreal"}
 _VALID_UI = {"qt", "web", "both", "none"}
 
 
+def _as_str_list(value: Any) -> List[str]:
+    """把 str / list / tuple / None 统一成去空白的字符串列表。
+
+    manifest 是手写的，作者很可能把单值写成字符串而不是列表；
+    这类「格式小差异」不该让插件被整个丢弃。
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [str(v).strip() for v in value if isinstance(v, str) and v.strip()]
+
+
+def _as_text(value: Any) -> str:
+    return str(value).strip() if isinstance(value, str) else ""
+
+
 class ManifestError(ValueError):
     """manifest 不合法。"""
 
@@ -39,6 +58,21 @@ class Plugin:
     description: str = ""
     path: str = ""
     raw: Dict[str, Any] = field(default_factory=dict)
+    # 面板展示用（v0.4.0 起）：分类与自描述。旧 manifest 没有这些字段时
+    # 一律留空，由 tak.core.config.resolve_categories 兜底成 general ——
+    # 保证第三方旧插件放进 tools/ 仍然能被发现和运行。
+    category: List[str] = field(default_factory=list)
+    summary: str = ""
+    features: List[str] = field(default_factory=list)
+    usage: List[str] = field(default_factory=list)
+    inputs: List[str] = field(default_factory=list)
+    outputs: List[str] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
+    icon: str = ""
+    # 「内部插件」只对外提供规则 / 能力，不作为独立工具出现在面板里。
+    # 典型场景：场景体检、规范校验、导出校验合并成一个「场景检查」入口后，
+    # 原插件目录保留为规则提供者，用户不该在工具列表里再看到三个体检。
+    internal: bool = False
 
     def supports(self, dcc: str) -> bool:
         return dcc in self.dcc
@@ -49,6 +83,11 @@ class Plugin:
             "min_version": self.min_version, "entry": self.entry,
             "ui": self.ui, "permissions": self.permissions,
             "description": self.description, "path": self.path,
+            "category": list(self.category), "summary": self.summary,
+            "features": list(self.features), "usage": list(self.usage),
+            "inputs": list(self.inputs), "outputs": list(self.outputs),
+            "tags": list(self.tags), "icon": self.icon,
+            "internal": self.internal,
         }
 
 
@@ -72,6 +111,11 @@ def validate_manifest(data: Dict[str, Any]) -> List[str]:
         errors.append("min_version 必须是对象")
     if data.get("ui", "qt") not in _VALID_UI:
         errors.append("ui 必须是 qt/web/both/none 之一")
+    # category 允许插件自定义 id，只校验字符集；具体分类是否存在由配置层决定，
+    # 这样插件可以自带分类，用户也可以在设置面板里改名/合并。
+    for cat in _as_str_list(data.get("category")):
+        if not cat.replace("_", "").isalnum():
+            errors.append("category 只能是字母/数字/下划线：%r" % cat)
     return errors
 
 
@@ -87,6 +131,15 @@ def load_manifest(path: str) -> Plugin:
         ui=data.get("ui", "qt"), permissions=list(data.get("permissions", [])),
         description=data.get("description", ""),
         path=os.path.dirname(os.path.abspath(path)), raw=data,
+        category=_as_str_list(data.get("category")),
+        summary=_as_text(data.get("summary")),
+        features=_as_str_list(data.get("features")),
+        usage=_as_str_list(data.get("usage")),
+        inputs=_as_str_list(data.get("inputs")),
+        outputs=_as_str_list(data.get("outputs")),
+        tags=_as_str_list(data.get("tags")),
+        icon=_as_text(data.get("icon")),
+        internal=bool(data.get("internal", False)),
     )
 
 

@@ -6,5 +6,6 @@
   "min_version": { "maya": "2023", "max": "2023", "mobu": "2023" },
   "entry": "spec_enforcer",
   "ui": "qt",
+  "internal": true,
   "permissions": ["scene.read", "node.write"]
 }

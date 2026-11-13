@@ -376,12 +376,12 @@ def test_manifest_discoverable_by_registry():
     ids = [plugin.id for plugin in registry.discover()]
     assert TOOL_ID in ids
     plugin = runner.find_plugin(TOOL_ID)
-    assert plugin.ui == "web"
+    assert plugin.ui == "both"
     assert set(plugin.dcc) == {"maya", "max", "mobu", "unreal"}
     assert plugin.permissions == ["scene.read"]
     assert "候选" in plugin.description
-    assert "人工复核" in plugin.description
-    assert "离线可跑" in plugin.description
+    assert "复核" in plugin.description
+    assert "离线" in plugin.description
 
 
 def test_new_tool_list_includes_plugin(capsys):

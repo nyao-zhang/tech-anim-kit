@@ -13,6 +13,104 @@
 
 （无）
 
+## [0.4.0] - 2026-11-14
+
+一次结构性重构，起因是一条很直接的反馈：**「所有工具运行都是各种体检」**。
+查下来不是 bug 而是设计问题 —— 面板把所有工具的执行结果都渲染成同一张
+Finding 表，各工具自带的 `ui_qt.show()` 从来没有被调用过；`manifest.json`
+里也没有分类字段，左侧就是一个平铺列表。加上菜单里平铺了三个「体检」入口，
+「这个工具到底做什么」变成了只能读源码才能回答的问题。
+
+### Changed
+
+- **工具从 11 个精简为 5 个**，每个都有独立界面：
+  - `qa_inspector` 场景检查（合并 `rig_health_guard` + `spec_enforcer` +
+    `ik_retarget_guard` + `export_bridge` 校验 + 内置规范规则，37 个检查项可勾选）
+  - `asset_pipeline` 导出 / 导入（合并 `export_bridge` + `ue_import_guard`，
+    内容与目标枚举、统一 profile、跨 DCC 缓存位）
+  - `mldeformer_factory` ML Deformer（对齐 Epic 工作流，补齐定位与文档）
+  - `defect_inspector` VLM 缺陷检查（把「输入什么 / 输出什么」写进 manifest）
+  - `agent_console` 对话控制台
+- **`tak/ui/qt/components.py` 主面板重写**：左栏改为「分类 → 工具」两级导航，
+  右栏从「一张卡片 + 一个运行按钮」改为详情面板（作用 / 功能 / 怎么用 /
+  输入输出 / 权限徽章）。「打开工具界面」调插件自己的 `ui_qt.show()`，
+  「快速运行」走通用契约 —— 二者不再是同一条路径。
+- **`tak/adapters/maya/menu.py` 菜单精简为三项**：打开面板 / 设置 / 关于。
+  场景体检、规范校验、导出校验不再是独立菜单项，它们是「场景检查」里可勾选的项。
+- **`tak/core/registry.py` 扩展 `Plugin`**：新增 `category` / `summary` /
+  `features` / `usage` / `inputs` / `outputs` / `tags` / `icon` / `internal`。
+  旧 manifest 不含这些字段时全部留空，仍能被发现和运行。
+
+### Added
+
+- **`tak/core/config.py`（新）用户配置层**：`~/.tak/config.json` 管理分类列表、
+  工具归类覆盖、隐藏工具、检查项勾选、导出 profile、主题、桥接端口。读取永不
+  抛异常（坏 JSON / 类型不对一律回退默认并附 `_warnings`），写入用
+  `tmp` + `os.replace` 原子替换。支持 `TAK_HOME` 覆盖路径。
+- **`tak/ui/qt/detail.py`（新）`ToolDetailPanel`**：从 manifest 自描述字段渲染
+  结构化详情，空态、加载失败、状态提示各自有明确文案。
+- **`tak/ui/qt/settings.py`（新）`SettingsDialog`**：分类增删改、工具归类
+  （中文名或 id 都认）、隐藏工具、主题、配置目录、恢复默认。保存后回调主面板刷新。
+- **`tak/ui/qt/launcher.py` 新增 `open_tool` / `open_settings`**：`open_tool`
+  按签名探测调 `ui_qt.show()`，缺失或失败时回退通用运行，两条路径都打印原因。
+- **`runner.list_categories`**：左栏分类列表带每个分类下的可见工具数。
+- **`runner.list_tools` 新增 `category` / `include_internal` 参数**。
+- **`tools/qa_inspector/`（新）**：`checks()` 从规则注册表实时聚合，
+  `groups()` 按六组聚合，`resolve_selection()` 处理「显式传入 > 用户保存 > 默认全开」，
+  `save_selection()` 落配置。
+- **`tools/asset_pipeline/`（新）**：`CONTENT_ITEMS` / `PRESETS` / `TARGETS`
+  三张枚举表，`build_plan` / `describe_plan` / `preflight` / `execute` /
+  `import_check` 五个环节，profile 存 `~/.tak/config.json`。
+- **`docs/modules/qa_inspector.md`、`docs/modules/asset_pipeline.md`**：
+  八节结构，含空场景下的真实输出。
+- 主题 token 升到 1.1.0：新增 `size_display`，QSS 补 `QListWidget::item`、
+  `takBadge` / `takSection` / `takDisplay` / `takGhost`、`QScrollArea`、
+  `QSplitter`、`QToolTip` 等选择器（`tak/ui/generate_theme.py`）。
+
+### Removed
+
+- **`tools/motion_library/`、`tools/rig_kb/`、`tools/skeleton_mapper/`** 及
+  对应测试、文档、Web 页签。理由：动作库与知识库已有成熟替代品，骨骼映射
+  在 `ik_retarget_guard` 的 mapping 词典里已覆盖，三者都是「重复造轮子」。
+- **`tak/core/motion/`、`tak/core/mapping/`** 两个内核包。
+- 菜单项 `tak_health_guard` / `tak_spec_enforcer` / `tak_export_bridge` /
+  `tak_motion_library` / `tak_web_panel`。
+
+### Fixed
+
+- **「所有工具都是体检」**：`ToolMainWindow.run_tool` 是唯一执行路径，任何工具
+  的结果都被塞进 `ResultTable`。现在「打开工具界面」优先走插件自己的
+  `ui_qt.show()`，只有不存在或失败时才回退。
+- **空场景误报 19 条「缺少必需关节」**：`qa_inspector` 现在先判数据源。判据是
+  「键存在」而不是「值非空」（`{"health": {}}` 是合法的空结果），并且排除
+  降级适配器 —— 它返回的骨架长得很像有数据，但 `metadata.degraded` 写着环境
+  不可用。没有数据源时只报一条 `qa_inspector.datasource.missing`（INFO）。
+- **`ensure_providers` 每次报「未发现插件 builtin」**：`builtin` 不是插件，
+  它的规则在 `tak/core/rules/engine.py` 导入时已注册，不该走 `find_plugin`。
+
+### Known limitations
+
+- **Maya 适配器仍不采集 `metadata.health`**，所以「场景卫生」9 条在真实 Maya
+  里会跳过，显示为「未执行」而不是「通过」。补齐采集需要真机配合。
+- **`defect_inspector` 只有 `ui_web.py`，没有 `ui_qt.py`**。面板里点「打开工具
+  界面」会回退到通用运行 + 报告窗口。独立 Qt 界面待补。
+- **ML Deformer 不做训练**：UE 5.8 Python 侧未暴露训练入口，本工具负责采样、
+  建集、验质与数据集导出。
+- **第三方插件导入与「AI 读插件自动生成描述」尚未实现**，设置面板预留了入口
+  文案但按钮未上线。
+- **Web 面板未完成收缩**：`panel.html` 仍保留 `kb` / `mapping` / `motion` 三个
+  页签，对应模块已删，点击会失败。定位改为只读报告看板的改造待下一批。
+- **备份无限累积**（`--clean-backups` 未做）。
+
+### 验证
+
+- 全量测试通过；`tools/qa_inspector`、`tools/asset_pipeline` 的发现、运行、
+  边界（空场景 / 空勾选 / 无宿主）均有用例覆盖。
+- `docs/MODULES.md` 与 `docs/modules/*.md` 通过八节结构、`rule_id` 真实性、
+  版本不超前三条护栏。
+- Qt 面板**尚未在真 Maya 里验证**（本机 pytest 环境无 PySide）。需要真机确认
+  分类切换、详情渲染、独立界面打开三条路径。
+
 ## [0.3.3] - 2026-11-14
 
 写模块文档时把「菜单点开到底是什么效果」逐条跑了一遍，于是发现两个工具在

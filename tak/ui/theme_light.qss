@@ -1,4 +1,4 @@
-/* TAK light theme - generated from tokens.json v1.0.0. DO NOT EDIT. */
+/* TAK light theme - generated from tokens.json v1.1.0. DO NOT EDIT. */
 QWidget, QMainWindow {
     background-color: #F5F6F8;
     color: #1F2329;
@@ -37,7 +37,7 @@ QLineEdit, QSpinBox, QComboBox, QPlainTextEdit, QTextEdit {
     selection-background-color: #E4EEFC;
 }
 QPlainTextEdit { font-family: 'Cascadia Code', Consolas, monospace; }
-QTableWidget, QTreeWidget, QListView {
+QTableWidget, QTreeWidget, QListView, QListWidget {
     background-color: #FFFFFF;
     alternate-background-color: #F8F9FB;
     color: #1F2329;
@@ -45,6 +45,20 @@ QTableWidget, QTreeWidget, QListView {
     border-radius: 8px;
     gridline-color: #DDE1E7;
 }
+QListWidget { padding: 4px; outline: none; }
+QListWidget::item {
+    padding: 8px 12px;
+    border-radius: 4px;
+    color: #5C6470;
+    border: 1px solid transparent;
+}
+QListWidget::item:hover { background-color: #FFFFFF; color: #1F2329; }
+QListWidget::item:selected {
+    background-color: #E4EEFC;
+    color: #1F2329;
+    border: 1px solid #2B6CD4;
+}
+QListWidget#takCategoryList::item { padding: 4px 12px; }
 QHeaderView::section {
     background-color: #FFFFFF;
     color: #5C6470;
@@ -56,6 +70,41 @@ QLabel[takSeverity="error"], QLabel[takSeverity="blocker"] { color: #C73A31; }
 QLabel[takSeverity="warning"] { color: #B5760A; }
 QLabel[takSeverity="info"] { color: #2B6CD4; }
 QLabel[takSeverity="success"] { color: #1F8A5B; }
+QLabel[takDisplay="true"] { font-size: 21px; font-weight: 600; }
+QLabel[takSection="true"] {
+    color: #5C6470;
+    font-size: 12px;
+    font-weight: 600;
+    padding-top: 8px;
+}
+QLabel[takBadge="true"] {
+    background-color: #EEF1F5;
+    color: #5C6470;
+    border: 1px solid #DDE1E7;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+}
+QPushButton[takGhost="true"] {
+    background-color: transparent;
+    border: 1px solid #DDE1E7;
+    color: #5C6470;
+}
+QPushButton[takGhost="true"]:hover { color: #1F2329; border-color: #2B6CD4; }
+QPushButton:disabled { color: #8A919B; border-color: #DDE1E7; }
+QScrollArea { border: none; background: transparent; }
+QScrollArea > QWidget > QWidget { background: transparent; }
+QSplitter::handle { background: #DDE1E7; }
+QSplitter::handle:horizontal { width: 1px; }
+QTabWidget::pane { border: none; }
+QToolTip {
+    background-color: #FFFFFF;
+    color: #1F2329;
+    border: 1px solid #C3C9D2;
+    padding: 4px;
+}
+QCheckBox, QRadioButton { color: #1F2329; }
+QCheckBox::indicator, QRadioButton::indicator { width: 14px; height: 14px; }
 QProgressBar {
     background-color: #FFFFFF;
     border: 1px solid #DDE1E7;

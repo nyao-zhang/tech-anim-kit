@@ -1,87 +1,127 @@
 # 功能模块总览
 
-> 十一个模块，每个一份详细文档，都在 [`docs/modules/`](modules/)。本页告诉你**哪个模块解决哪类问题**、**从哪进**、**它们共用什么概念**。
+这份文档回答三件事：面板里有什么、每件事该用哪个工具、哪些东西**不在**面板里却仍然在工作。
 
-## 0. 先回答一个问题：为什么菜单里只有六项
+## 0. 面板长什么样
 
-`TAK / Tech Anim Kit` 菜单放的是**高频入口**：打开面板、场景体检、规范校验、导出校验、动作检索、Web 面板。十一个模块里其余几个不是不存在，而是入口不同：
+```
+┌─────────────┬──────────────────────────────────────────┐
+│ 分类         │  场景检查                        [通用][绑定]│
+│  全部 · 5    │  一次跑完所有检查项：命名规范、场景卫生…      │
+│  通用 · 2    │                                          │
+│  绑定 · 3    │  这个工具做什么                           │
+│  动画 · 2    │  · 按组列出全部检查项                     │
+│  管线 · 1    │  · 每项可单独勾选                         │
+│  AI · 3      │                                          │
+│              │  怎么用                                  │
+│ 工具         │  1. 打开「场景检查」，左侧按组浏览          │
+│  场景检查     │  2. 取消不需要的项                        │
+│  导出 / 导入  │  3. 点「运行检查」                        │
+│  ML Deformer │                                          │
+│  VLM 缺陷检查 │  输入 / 输出                              │
+│  对话控制台   │  输入  当前 DCC 场景快照、项目规范          │
+│              │  输出  检查报告、按组统计的问题计数          │
+│  [ 设置 ]     │                                          │
+│              │         [快速运行]  [打开工具界面]         │
+└─────────────┴──────────────────────────────────────────┘
+```
 
-- 点 **打开面板** → Qt 主面板里列出当前 DCC 支持的**全部**工具（Maya 下 9 个、Unreal 下 10 个），逐个运行；
-- 点 **Web 面板** → 浏览器里五个页签：对话候选、知识库、抽帧诊断、骨骼映射、动作检索；
-- 任何模块都能用 Python 直接调（每份文档第 2 节都有可复制的代码）。
+左栏两级：**先分类，再工具**。右侧是选中工具的详情 —— 它解决什么问题、能做哪些事、几步怎么用、吃什么吐什么。底部两个按钮的分工：
 
-差异来自 `manifest.json` 的 `dcc` 字段：`ik_retarget_guard` 与 `ue_import_guard` 只支持 Unreal，`spec_enforcer` 只支持 Maya / Max / MoBu，所以在 Maya 的工具列表里看不到它们——这是正确行为，不是缺失。
+- **打开工具界面** —— 打开这个工具自己的窗口（每个工具一个独立 UI，带自己的配置项）；
+- **快速运行** —— 用默认参数跑一遍，结果直接进「结果」页。
 
-## 1. 入口总表
+## 1. 为什么菜单只有三项
 
-| 模块 | 中文名 | DCC | Maya 菜单 | Web 页签 | Qt 面板 | 读取场景 |
-|---|---|---|---|---|---|---|
-| [`rig_health_guard`](modules/rig_health_guard.md) | 场景体检 | 四端 | 场景体检 | — | 有 | 只读 |
-| [`spec_enforcer`](modules/spec_enforcer.md) | 规范校验与修复 | Maya/Max/MoBu | 规范校验 | — | 有 | 只读 + 计划写 |
-| [`export_bridge`](modules/export_bridge.md) | 导出前后校验 | 四端 | 导出校验 | — | 有 | 只读 |
-| [`ue_import_guard`](modules/ue_import_guard.md) | UE 导入校验 | Unreal | — | — | 有 | 只读 |
-| [`skeleton_mapper`](modules/skeleton_mapper.md) | 骨骼语义映射 | 四端 | — | `?tab=mapping` | 有 | 只读 |
-| [`ik_retarget_guard`](modules/ik_retarget_guard.md) | 重定向映射校验 | Unreal | — | — | 有 | 只读 |
-| [`motion_library`](modules/motion_library.md) | 动作库语义检索 | 四端 | 动作检索 | `?tab=motion` | — | 不读 |
-| [`rig_kb`](modules/rig_kb.md) | 绑定知识库 RAG | 四端 | — | `?tab=kb` | — | 不读 |
-| [`mldeformer_factory`](modules/mldeformer_factory.md) | ML Deformer 数据工厂 | 四端 | — | — | 有 | 只读 |
-| [`defect_inspector`](modules/defect_inspector.md) | 抽帧缺陷诊断 | 四端 | — | `?tab=vision` | — | 不读 |
-| [`agent_console`](modules/agent_console.md) | 对话式控制台 | 四端 | — | `?tab=chat` | 有 | 只读 + 确认后写 |
+`TAK / Tech Anim Kit` 菜单现在只有 **打开面板 / 设置 / 关于 TAK**。
 
-「只读 + 计划写」的意思是：它只产出修复计划，写场景必须经过 dry-run 预览、权限授予、人工二次确认三步，且执行器开 undo、失败整体回滚。
+旧版本是六项：面板、场景体检、规范校验、导出校验、动作检索、Web 面板。问题不在数量，在于**前三个是同一件事的三个切片**：同一个规则引擎、同一份快照、同一张结果表，但各自只跑自己那一份规则。点齐三个才算检查完整，而没人知道这一点。
 
-## 2. 按任务找工具
+现在检查项全部收进「场景检查」工具，用勾选控制跑哪些 —— 在面板里一次配完，比在菜单里点三次可靠。
 
-| 你要做的事 | 按顺序用 |
+## 2. 工具总表
+
+| 分类 | 工具 | 一句话 | 文档 |
+|---|---|---|---|
+| 通用 / 绑定 / 动画 | 场景检查 | 37 个检查项可勾选，一次跑完 | [qa_inspector](modules/qa_inspector.md) |
+| 管线 / 绑定 | 导出 / 导入 | 选内容、选目标、导到文件或缓存位，另一侧导入校验 | [asset_pipeline](modules/asset_pipeline.md) |
+| AI / 绑定 | ML Deformer | 采样计划、数据集、五项质量门槛 | [mldeformer_factory](modules/mldeformer_factory.md) |
+| AI / 动画 | VLM 缺陷检查 | 抽帧交给视觉模型找变形缺陷，只给候选 | [defect_inspector](modules/defect_inspector.md) |
+| AI / 通用 | 对话控制台 | 一句话问场景，得到判定与可审核的修复计划 | [agent_console](modules/agent_console.md) |
+
+（分类列写的是默认归类，在设置面板里可以改。「全部」是视图不是分类。）
+
+## 3. 不在工具列表里的插件
+
+有五个插件仍然存在、仍然在跑，但 `manifest.json` 里标了 `"internal": true`，不再作为独立工具出现在面板里 —— 它们是**规则提供者**：
+
+| 插件 | 现在是什么 | 文档 |
+|---|---|---|
+| `rig_health_guard` | 「场景卫生」组 9 条规则 | [rig_health_guard](modules/rig_health_guard.md) |
+| `spec_enforcer` | 「绑定规范」组 7 条规则 | [spec_enforcer](modules/spec_enforcer.md) |
+| `ik_retarget_guard` | 「IK / 重定向」组的规则 | [ik_retarget_guard](modules/ik_retarget_guard.md) |
+| `export_bridge` | 「导出前置」组 2 条规则 + 导出预检实现 | [export_bridge](modules/export_bridge.md) |
+| `ue_import_guard` | 「导入后校验」组的规则 + 导入一致性实现 | [ue_import_guard](modules/ue_import_guard.md) |
+
+在设置面板里勾「显示内部插件」可以看到它们；日常使用不需要。
+
+## 4. 按任务找工具
+
+| 我想… | 用哪个 | 入口 |
+|---|---|---|
+| 交付前扫一遍有没有问题 | 场景检查 | 面板 → 通用 → 场景检查 |
+| 只看权重问题 | 场景检查 | 打开界面，取消其它组，只留「绑定规范」 |
+| 把绑定导到 UE | 导出 / 导入 | 面板 → 管线 → 导出 / 导入 |
+| 在两个 DCC 之间传一份骨骼 | 导出 / 导入 | 选「仅骨骼」+ 勾「导出到缓存位」 |
+| 判断一份数据够不够训练 ML Deformer | ML Deformer | 面板 → AI → ML Deformer |
+| 逐帧找穿模和塌陷 | VLM 缺陷检查 | 面板 → AI → VLM 缺陷检查 |
+| 不想点界面，直接问 | 对话控制台 | 面板 → AI → 对话控制台 |
+| 改分类、藏工具、导入第三方插件 | 设置 | 菜单 → 设置，或面板左下角「设置」 |
+| 换深色 / 浅色 | 设置 | 设置 → 常规 → 主题 |
+
+## 5. 分类可以改
+
+内置五个分类只是初值：`general`（通用）、`rigging`（绑定）、`animation`（动画）、`pipeline`（管线）、`ai`（AI）。
+
+设置面板 → 分类页可以：新增、重命名、删除。删掉一个分类时，原本归在它下面的工具会**回落到「通用」**，不会从列表里消失。
+
+设置面板 → 工具归类页可以改每个工具属于哪些分类，直接填中文名或 id，多个用逗号分隔。
+
+改完存到 `~/.tak/config.json`，插件的 `manifest.json` 不会被改动 —— 升级插件不会覆盖你的偏好。
+
+## 6. 共用概念
+
+| 概念 | 含义 |
 |---|---|
-| 接手一个别人做的绑定文件，先摸清有没有坑 | `rig_health_guard` → `spec_enforcer` |
-| 按项目规范查命名、层级、权重，并生成修复计划 | `spec_enforcer` |
-| 把 Maya 的骨架导成 FBX 前确认没变形 | `export_bridge`（导出前）→ `ue_import_guard`（导入后） |
-| 把 Mixamo / Biped 的动画套到 UE Mannequin 上 | `ik_retarget_guard`（查映射）→ `skeleton_mapper`（解冲突） |
-| 找一段合适的跑步循环，或找和某段相似的动作 | `motion_library` |
-| 想知道「权重超 4 个影响骨」到底怎么改 | `rig_kb` |
-| 要训 ML Deformer，但不知道怎么摆姿势采样 | `mldeformer_factory` |
-| Playblast 里角色手臂抖动，但不知道第几帧 | `defect_inspector` |
-| 不确定该用哪个工具，或想用一句话描述问题 | `agent_console` |
+| **快照 snapshot** | 从 DCC 取出的纯数据结构（关节、网格、蒙皮、健康数据），所有判定只吃这个 |
+| **规则 rule** | 能写成 `if` 的确定性判定。AI 不参与判定，只解释 |
+| **报告 Report** | 规则的输出：findings 按 blocker > error > warning > info 排序 |
+| **插件 manifest** | `tools/<id>/manifest.json`，声明 id、分类、能力、自描述 |
+| **内部插件 internal** | 只提供规则 / 实现，不单独出现在面板里 |
+| **profile** | 导出的配置快照，可命名保存，导出端与导入端共用 |
 
-## 3. 共用概念
+## 7. 当前能力边界
 
-读懂任何一份模块文档，只需要先认识这六个东西。
+- **Maya 适配器不采集 `metadata.health`**，所以「场景卫生」那 9 条在真实 Maya 里会跳过，显示为「未执行」而不是「通过」。这是已知缺口。
+- **ML Deformer 不做训练**。UE 5.8 的 Python 侧没有暴露 `MLDeformerAsset` / `NeuralMorphModel` 的训练入口，本工具负责采样、建集、验质和数据集导出，训练交给 UE 的 ML Deformer 训练器。
+- **VLM 缺陷检查依赖视觉模型**。离线时退化为几何启发式候选，报告里会标明是哪一种。
+- **Web 面板是只读报告看板**，见下节。
 
-**快照（snapshot）** — 场景的纯数据投影，一个 JSON。核心键：`dcc`、`version`、`unit`、`up_axis`、`frame_range`、`joints`（每根骨的名字、父级、深度、变换、命名空间）、`skin`（影响骨上限、权重和偏差、deformer 列表）、`metadata`。所有检查都读快照，不读场景本身——这样才能在无宿主环境里跑、才能单测。
+## 8. Web 面板的定位
 
-**规范（spec）** — `schema/rig_spec.default.json` 那套约定：命名正则、必需关节、层级上限、权重容差、控制器命名空间与颜色。`spec_enforcer` 拿它判合规，其它模块拿它当参考。
+Web 面板**不是**第二个工具入口。它的实际场景只有两个：
 
-**结论（Finding）** — 一条检查结果，六个字段：`rule_id`（稳定标识，形如 `rig_health_guard.orphan_nodes`）、`severity`、`message`、`node`、`fix_hint`、`data`（含可选的结构化修复指令 `fix`）。`rule_id` 是稳定的，可以拿去建工单、做统计、写豁免规则。
+1. **跨人看报告** —— 在 Maya 里跑完检查，把报告以 HTML 形式发链接给主管或同事，对方不需要装 Maya、不需要许可、不需要同步插件版本；
+2. **离线回看** —— 历史报告留在浏览器里，不依赖 DCC 进程。
 
-**严重级（Severity）** — `info` / `warning` / `error` / `blocker`。只有 `error` 与 `blocker` 会让报告判为不通过。所以「有结论」和「不通过」是两件事。
+因此它只保留报告页与只读 API，去掉了知识库、骨骼映射、动作检索三个页签 —— 那三个功能要么已经删掉，要么属于工具自己的 Qt 界面。日常操作请用 Qt 面板。
 
-**报告（Report）** — 一次运行的完整结果：`passed`、按严重级的计数、结论列表、`metadata`（各模块自己往里放解释、计划、溯源信息）。
+## 9. 文档的维护约定
 
-**权限（permissions）** — 写在 `manifest.json` 里，运行时校验：`scene.read`（读快照）、`node.write`（改场景）、`export.fbx`（触发导出）、`import.validate`（校验导入）。缺权限的写操作会抛 `DSLError`，不会静默降级成只读。
+`docs/modules/<plugin_id>.md` 与 `tools/<plugin_id>/` 一一对应，CI 会检查三件事：
 
-还有一条贯穿全部模块的约定：**判定由确定性代码给，AI 只写解释和候选**。同样的输入，两次运行结果逐字节相同（`mldeformer_factory` 的 `version` 与 `pose_digest` 就是这么算的）。这条不是洁癖——它让"上次也是这个问题"这句话有意义。
+1. 每个插件都有文档，且没有留下已删插件的孤儿文档；
+2. 每份文档都有固定的八节（解决什么问题 / 怎么打开 / 输入 / 输出 / 校验项清单 / 典型用法 / 边界与限制 / 与其它模块的关系）；
+3. 文档里出现的 `rule_id` 必须在源码里真实存在，文档标注的版本不能高于 `tak/version.py`。
 
-## 4. 当前能力边界
-
-文档写的是**代码实现的边界**，以下是几条需要你知道的现状，避免误判：
-
-- **场景体检**：九条规则已实现，但它们读的是快照里的 `metadata.health`。Maya 适配器目前还不采集这一段，所以菜单点开会看到一条「未提供 metadata.health，本次未执行体检规则」的提示——**这是如实报告，不是通过**。真正采集是下一步工作。
-- **规范校验**：菜单入口会自动开启作用域，能跑满七条规则；从脚本调用必须显式传 `options={"spec_enforcer": True}`，否则会得到一条「未开启作用域」的提示。
-- **UE 导入校验**：Unreal 适配器只产常规骨架字段，`ue_assets`（资产级信息）需要调用方注入。
-- **ML Deformer**：只产数据集与门槛结论，**不调用训练入口**——UE 5.7/5.8 的 Python 侧没有暴露 `MLDeformerAsset` / `NeuralMorphModel` / `DeformerGraphAsset`，能力位 `mldeformer.train` 恒为 `false`。
-- **AI 相关**：默认离线。没有配 `TAK_AI_API_KEY` 时，解释层与候选层降级为确定性结果，链路不中断。
-
-## 5. 建议阅读顺序
-
-1. 先读 [`agent_console`](modules/agent_console.md) 的前两节，理解「对话 → 确定性判定 → 候选动作 → 确认」这条主线；
-2. 再读 [`rig_health_guard`](modules/rig_health_guard.md) 与 [`spec_enforcer`](modules/spec_enforcer.md)，它们代表最典型的两类工具（只读检查 / 检查加计划）；
-3. 有导入导出需求时读 [`export_bridge`](modules/export_bridge.md) 与 [`ue_import_guard`](modules/ue_import_guard.md)；
-4. 做重定向时按 [`ik_retarget_guard`](modules/ik_retarget_guard.md) → [`skeleton_mapper`](modules/skeleton_mapper.md) 的顺序读，后者消费前者的映射资产；
-5. 其余按需查。
-
-## 6. 文档的维护约定
-
-每份模块文档头部的版本号是**它对照的代码版本**。模块行为变化时改对应文档；只改版本号不改内容说明这次发版没碰这个模块。
-
-`tests/test_docs_modules.py` 会检查：每个插件都有文档、文档是八节结构、文档里出现的 `rule_id` 必须在源码里真实存在、本页覆盖全部插件。所以漏写文档或编造 `rule_id` 会让 CI 失败。
+新增插件时先跑 `python tools/new_tool.py <id>`，它会生成 manifest 骨架；补完 `category` / `summary` / `features` / `usage` 后，面板详情区就能直接读到。

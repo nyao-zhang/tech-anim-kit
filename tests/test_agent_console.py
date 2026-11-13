@@ -453,7 +453,7 @@ def test_manifest_discoverable_and_valid():
     plugins = registry.discover()
     assert TOOL_ID in [plugin.id for plugin in plugins]
     plugin = runner.find_plugin(TOOL_ID)
-    assert plugin.name == "Agent Console 对话式控制台"
+    assert plugin.name == "对话控制台"
     assert set(plugin.dcc) == {"maya", "max", "mobu", "unreal"}
     assert plugin.min_version == {"maya": "2023", "max": "2023",
                                   "mobu": "2023", "unreal": "5.8"}
