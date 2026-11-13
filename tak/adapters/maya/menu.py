@@ -33,6 +33,10 @@ MENU_LABEL = "TAK / Tech Anim Kit"
 MENU_OWNER = "TAK_MainMenu"
 SHELF_NAME = "TAK"
 
+#: 主窗口候选名（Maya 2022+ 的 Qt 主窗口仍叫 ``MayaWindow``；老版本/自定义
+#: 启动脚本可能用 ``mayaMainWindow``）。按顺序用 ``window -q -exists`` 验证。
+_MAIN_WINDOW_CANDIDATES = ("MayaWindow", "mayaMainWindow")
+
 # (菜单项显示名, 动作标识, 中文说明)。动作标识由 ``_dispatch`` 解析，
 # 不直接内联代码：菜单项只传标识，避免把执行逻辑塞进 Maya 的 command 字符串。
 MENU_ITEMS: Tuple[Tuple[str, str, str], ...] = (
@@ -67,11 +71,25 @@ def _unavailable(reason: str) -> Dict[str, Any]:
 
 
 def _main_window(cmds: Any) -> str:
-    """返回 Maya 主窗口名；老版本用 ``MayaWindow``，2022+ 走 ``mayaMainWindow``。"""
-    value = call(cmds, "about", None, "mayaMainWindow", q=True)
-    if isinstance(value, str) and value:
-        return value
-    return "MayaWindow"
+    """返回 Maya 主窗口名；找不到返回空串。
+
+    这里刻意**不用** ``cmds.about(mayaMainWindow=True)``：Maya 2026 实测该标志
+    非法（``TypeError: 标志"mayaMainWindow"无效``），异常被 ``call`` 吞掉后只会
+    静默落回写死的 ``"MayaWindow"`` —— 看着能用，实际上从没验证过窗口是否存在。
+
+    改成按候选名查 ``window -q -exists``，都不在时再用 ``lsUI(window=True)``
+    兜底；全都没有就是真的没有主窗口（batch / 无界面启动），由调用方给出明确的
+    reason，而不是假装成功。
+    """
+    for name in _MAIN_WINDOW_CANDIDATES:
+        if call(cmds, "window", False, name, q=True, exists=True):
+            return name
+    windows = call(cmds, "lsUI", [], window=True) or []
+    try:
+        first = list(windows)[0]
+    except (TypeError, IndexError):
+        return ""
+    return first if isinstance(first, str) else ""
 
 
 # --------------------------------------------------------------------------- #
@@ -90,12 +108,22 @@ def register_menu(menu_name: str = MENU_NAME,
 
     try:
         window = _main_window(cmds)
+        if not window:
+            # batch / 无界面启动：cmds.menu 不会抛异常，而是直接返回 False，
+            # 老的「只判 is None」写法会把这里报成 ok=True —— 假成功比失败更坏。
+            return _unavailable(
+                "找不到 Maya 主窗口，菜单无法注册（batch 或无界面启动时属正常）："
+                "cmds.about(mayaMainWindow) 在 Maya 2026 已非法，"
+                "window -q -exists 与 lsUI(window=True) 也都没有结果")
         # 幂等：先删后建。删除失败不算错误（可能本来就没有）。
         _delete_menu(cmds, menu_name)
         menu = call(cmds, "menu", None, menu_name, parent=window,
                     label=label, tearOff=True, allowOptionBoxes=True)
-        if menu is None:
-            return _unavailable("cmds.menu 未能创建菜单（主窗口 %s）" % window)
+        # 只有真的能查回来才算建成。Maya 在无 UI 环境下会让 cmds.menu 返回
+        # False 而不抛异常，因此必须验证，不能拿返回值当成功证据。
+        if not call(cmds, "menu", False, menu_name, q=True, exists=True):
+            return _unavailable("cmds.menu 未真正创建菜单（主窗口 %s，返回值 %r）"
+                                % (window, menu))
 
         created = 0
         for item_label, action, _hint in MENU_ITEMS:
@@ -105,7 +133,7 @@ def register_menu(menu_name: str = MENU_NAME,
             command = _command_for(action)
             item = call(cmds, "menuItem", None, item_label, parent=menu_name,
                         command=command)
-            if item is not None:
+            if item is not None and item is not False:
                 created += 1
         return {"ok": True, "menu": menu_name, "label": label,
                 "items": created}

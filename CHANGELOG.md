@@ -13,6 +13,54 @@
 
 （无）
 
+## [0.3.2] - 2026-11-14
+
+补丁版：修掉 0.3.1 在**中文界面 Maya** 上「装了等于没装」的问题，以及两处
+「假成功」。测试 **1121 → 1130**（+9）。
+
+### Fixed
+
+- **安装器写进了 Maya 根本不扫描的目录**（0.3.1 上线 1 小时内由真机暴露）。
+  中文界面的 Maya 2026 把用户脚本目录放在
+  ``Documents/maya/2026/zh_CN/scripts/``，实测 ``internalVar(userScriptDir=True)``
+  正是这个路径，而 ``Documents/maya/2026/scripts`` **完全不在** ``sys.path`` 里；
+  0.3.1 按后者写入，于是用户打开 Maya 后既没有菜单，手动
+  ``from tak.adapters.maya.menu import register_menu`` 还报
+  ``ModuleNotFoundError: No module named 'tak'`` —— 因为那个文件从未被执行。
+  现在探测顺序是 ``<版本>/<语言>/scripts`` → ``<版本>/scripts`` →
+  版本无关的 ``Documents/maya/scripts``；语言目录按存在性判定，多个并存时取
+  ``prefs`` 最近修改的那个，可用 ``TAK_MAYA_LANG`` / ``MAYA_UI_LANGUAGE`` 强制指定。
+- **``register_menu()`` 会假成功**：Maya 在没有主窗口时（batch / 无界面启动）
+  ``cmds.menu`` **不抛异常**，而是直接返回 ``False``；老实现只判 ``menu is None``，
+  于是返回 ``{"ok": True, "items": 7}`` 却一个菜单都没建（用
+  ``mayabatch -script`` 实测复现）。现在创建后必须
+  ``cmds.menu(..., q=True, exists=True)`` 查得回来才算成功，否则返回
+  ``ok=False`` 并说明「找不到主窗口」。
+- **``cmds.about(mayaMainWindow=True)`` 在 Maya 2026 是非法标志**：
+  ``TypeError: 标志"mayaMainWindow"无效``。异常被 ``call()`` 吞掉后永远落回
+  写死的 ``"MayaWindow"``，也就是说「主窗口探测」从来没真正探测过。改为按候选名
+  ``window -q -exists`` 验证，再用 ``lsUI(window=True)`` 兜底。
+- ``tests/test_installer.py`` 里 ``_fake_home`` 被定义了两次，后一个静默覆盖前一个。
+
+### Added
+
+- 9 个用例：语言子目录优先 / 英文界面回落 / 环境变量覆盖 / 多语言取活跃 prefs /
+  install 端到端必须写进语言目录；无主窗口必须 ``ok=False`` 且不留注册痕迹；
+  宿主「返回名字却没真建」时必须报失败；``_main_window`` 不得再调 ``about``。
+
+### Known limitations
+
+- **语言目录是启发式判定**：靠 ``<版本>/`` 下 ``xx_YY`` 形态的目录名 + ``prefs``
+  修改时间。若用户手工建了多个语言目录且时间接近，可能选错；此时用
+  ``TAK_MAYA_LANG`` 显式指定。真正的权威值是 Maya 进程里的
+  ``internalVar(userScriptDir=True)``，安装器不启动 Maya 就拿不到。
+- **0.3.1 装过的机器会留下死文件**：``<版本>/scripts/userSetup.py``（Maya 不扫描）。
+  升级到 0.3.2 后 install 不会自动删它（卸载只处理当前探测到的路径），需要手工
+  删除。本机已清。
+- **GUI 菜单是否真的出现仍需人工确认**：batch 模式没有主窗口，能验证到
+  「块被执行、``tak`` 可导入、``dispatch`` 可运行、失败路径如实报错」，但
+  「菜单栏里那一行」只有开 GUI 能看见。
+
 ## [0.3.1] - 2026-11-13
 
 补丁版：修掉 0.3.0 安装器的一处静默失败，并为此补上回归护栏。无接口变更，
@@ -137,6 +185,7 @@
 ---
 
 [Unreleased]: #unreleased
+[0.3.2]: #032---2026-11-14
 [0.3.1]: #031---2026-11-13
 [0.3.0]: #030---2026-11-13
 [0.2.0]: #020---2026-11-13

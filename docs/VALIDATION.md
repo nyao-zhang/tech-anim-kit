@@ -113,28 +113,85 @@ python tools/new_tool.py --list
 回填格式：`B21 ✅ Maya2023 / Win11 / 备注：…`。
 **注意**：B21–B24 会真的写用户目录。执行前先 `--plan` 看一眼，确认 `[create]` / `[append]` 的路径是你预期的那个；安装器只改自己的标记块，但路径选错仍然会写错地方。
 
-### F.1 已在真机实际执行的部分（2026-11-13，Windows 11 / Python 3.13）
+### F.1 已在真机实际执行的部分（2026-11-13 / 11-14，Windows 11 / Python 3.13）
 
 下表是**已经跑过并留下输出**的步骤。它覆盖 B21–B24 里「不打开 DCC 也能判定」的那一半，
 **不覆盖**「重启 Maya 后菜单栏是否真的出现」这类只有 GUI 能回答的部分——那部分仍待你复验。
 
 | 步骤 | 实际执行 | 结果 |
 |---|---|---|
-| 探测 | `python -m tak.install --list` | 识别到 **Maya 2026**（`Documents/maya/2026`）与 **MoBu 2023**（`Documents/MB/2023`）；3ds Max 报未发现，因为本机只有 2019/2021，低于 `min_version="2023"`——**这是正确行为，不是缺陷** |
-| 首次安装 | `--apply --dcc maya,mobu,unreal --root unreal=<项目>/Content/Python` | `create=3`。三个入口文件此前都不存在，均为新建：`maya/2026/scripts/userSetup.py`、`MB/2023/config/PythonStartup/tak_startup.py`、`面部AR示例/Content/Python/init_unreal.py` |
-| 幂等 | 紧接着再跑 `--plan` | 三个目标全部 `[skip]`，`skip=3`，未产生第二个标记块 |
+| 探测 | `python -m tak.install --list` | 识别到 **Maya 2026** 与 **MoBu 2023**（`Documents/MB/2023`）；3ds Max 报未发现，因为本机只有 2019/2021，低于 `min_version="2023"`——**这是正确行为，不是缺陷** |
+| 首次安装（0.3.1） | `--apply --dcc maya,mobu,unreal` | `create=3`。**但 Maya 那份写错了地方**，详见下方「F.2 一次真实事故」 |
+| 幂等 | 紧接着再跑 `--plan` | 三个目标全部 `[skip]`，未产生第二个标记块 |
 | 卸载可逆 | `--uninstall --apply` 后重新 `--apply` | 块内内容删除后文件回到「只有块」前的状态；重新安装得到同内容（`replace-block` 而非追加） |
-| 语法 | 对三份落盘文件跑 `ast.parse(feature_version=(3, 9))` | 全部通过——块在 Maya 2023 的 Python 3.9 里能编译 |
-| 执行（无宿主） | 在普通 Python 里 `exec()` 三份启动文件 | 无异常；`tak` 与 `tak.adapters.maya.menu` 均加载成功；Maya 块输出 `[TAK] Maya 菜单未注册：maya.cmds 不可用（无 Maya 宿主）`——**无宿主时这是正确降级** |
-| 版本刷新 | 0.3.1 后重新 `--apply` | `replace-block=3` → 再 `--plan` 全部 `skip`；块头变为 `# >>> TAK BEGIN maya v0.3.1` |
+| 语法 | 对落盘文件跑 `ast.parse(feature_version=(3, 9))` | 全部通过——块在 Maya 2023 的 Python 3.9 里能编译 |
+| 执行（无宿主） | 在普通 Python 里 `exec()` 启动文件 | 无异常；Maya 块输出 `[TAK] Maya 菜单未注册：maya.cmds 不可用（无 Maya 宿主）`——**无宿主时这是正确降级** |
+| **真实 Maya 启动** | `mayabatch.exe -script`（真 `maya.cmds`，非 mock） | 块被执行；`sys.path` 里出现仓库根；`import tak` 成功（`0.3.1` / 修好后 `0.3.2`）；`tak.adapters.maya.menu.dispatch("tak_about")` 返回版本与仓库路径 |
+| **真实 Maya 菜单** | 同上，调 `register_menu()` | batch 无主窗口，返回 `ok=False` 并给出原因（0.3.1 之前会**假报** `ok=True, items=7`）。GUI 下的真实建菜单仍需人工确认 |
 
 **仍需你做的**（GUI 才能回答，agent 无法替代）：
 
-1. **B21 核心项**：启动 Maya 2026，看菜单栏是否出现 `TAK / Tech Anim Kit`；六个菜单项是否可点；
-   在脚本编辑器里连跑两次 `from tak.adapters.maya.menu import register_menu; register_menu()`
-   —— 应当**只有一份菜单**（`cmds.menu` 本身不查重，代码里是先 `deleteUI` 再建）。
+1. **B21 核心项**：启动 Maya 2026，看菜单栏是否出现 `TAK / Tech Anim Kit`；菜单项是否可点。
+   先在脚本编辑器贴这段做自检：
+   ```python
+   import tak, tak.adapters.maya.menu as m
+   print(tak.__version__, tak.__file__)      # 应打印 0.3.2 与仓库路径
+   print(m.register_menu())                   # 应返回 {'ok': True, ...}
+   print(m.register_menu())                   # 再跑一次，菜单不应翻倍
+   ```
 2. **B22**：MoBu 2023 启动是否无报错、菜单是否出现。Max 需要 2023+ 才能测。
 3. **B23**：UE 编辑器输出日志里是否有 `[TAK]` 行、`TAK` 菜单是否出现在工具栏。
 4. **B24 完整项**：卸载后**哈希**是否与安装前逐字节一致（我这里验的是「块被删除、文件可重建」，
-   没做安装前的 `sha256sum` 留底——因为三个文件在安装前都不存在，无法先算哈希）。
+   没做安装前的 `sha256sum` 留底——因为文件在安装前都不存在，无法先算哈希）。
 5. **B25 / B26**：真实动作库与生产骨架，见上表。
+
+### F.2 一次真实事故：Maya 的用户脚本目录带语言子目录（0.3.1 → 0.3.2）
+
+**现象**：0.3.1 安装后打开 Maya 2026，菜单栏没有 TAK；手动执行
+`from tak.adapters.maya.menu import register_menu` 报
+`ModuleNotFoundError: file <maya console> line 1: No module named 'tak'`。
+
+**排查（可复现，不需要 GUI）**：用 `mayabatch.exe -script` 在真实 Maya 里取地面真相。
+这套流程已经固化成一个脚本，直接跑：
+
+```bash
+python validation/maya_startup_probe.py                 # 自动找最高版本 mayabatch
+python validation/maya_startup_probe.py --maya-version 2024
+# 结果：validation/maya_startup_probe_result.json
+```
+
+它会在真 Maya 里打印 `userAppDir` / `userScriptDir` / 用户脚本目录在 `sys.path` 的
+位置 / `import tak` 是否成功 / `register_menu()` 返回值 / `dispatch("tak_about")` 结果。
+**这是唯一能自动验证「启动块到底有没有被执行」的手段** —— 单测用的是假 `maya.cmds`，
+永远发现不了「文件写进了 Maya 不扫描的目录」。
+
+当时的手工观测：
+
+| 观测 | 值 |
+|---|---|
+| `cmds.about(version=True)` | `2026` |
+| `cmds.internalVar(userAppDir=True)` | `C:/Users/NYAO/Documents/maya/` |
+| `cmds.internalVar(userScriptDir=True)` | `C:/Users/NYAO/Documents/maya/2026/zh_CN/scripts/` |
+| `sys.path` 里的 Maya 用户目录 | `[35] …/2026/zh_CN/prefs/scripts`、`[36] …/2026/zh_CN/scripts`、`[37] …/maya/scripts` |
+| `…/maya/2026/scripts` | **完全不在 sys.path 里** ← 0.3.1 写的就是这里 |
+
+**另一组实测**：同时往 `2026/zh_CN/scripts/`、`2026/zh_CN/prefs/scripts/` 放探针
+`userSetup.py`，两份**都被执行**，且共享目录 `maya/scripts/userSetup.py` 的报错
+不影响它们 —— 说明 Maya 会执行脚本路径里的**每一个** `userSetup.py`，
+不是「只执行第一个」。
+
+**同批发现的两个「假成功」**（都由 `mayabatch` 暴露）：
+
+1. batch 里 `cmds.menu` / `cmds.window` **返回 False 而不抛异常**，旧实现只判
+   `is None`，于是 `register_menu()` 报 `{"ok": True, "items": 7}` —— 一个菜单都没建。
+2. `cmds.about(mayaMainWindow=True)` 在 Maya 2026 是**非法标志**
+   （`TypeError: 标志"mayaMainWindow"无效`），异常被吞后永远落回写死的 `"MayaWindow"`，
+   主窗口探测实际上从未生效。
+
+**结论**：安装路径按 `<版本>/<语言>/scripts` 优先；`ok` 必须靠
+`cmds.menu -q -exists` 验证，不能拿返回值当成功证据。
+
+**副产品**：用户自己的 `Documents/maya/scripts/userSetup.py`（2023 年的 `vaccine` 工具）
+在 Maya 2026 每次启动都报
+`RuntimeError: AttributeError: module 'vaccine' has no attribute 'phage'` ——
+**与 TAK 无关的既有问题**，但用户的 Maya 每次启动都在刷这条错误，值得清理。

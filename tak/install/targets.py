@@ -161,14 +161,30 @@ TARGETS = {
         "name": "Autodesk Maya",
         "min_version": "2023",
         "default_roots": [
-            # ``scripts`` 目录是 Maya 首次运行/首次需要时才创建的，干净机器上
-            # 一定不存在。因此探测证据用版本目录本身，写入根仍指向 scripts，
-            # 由 writer 负责建目录 —— 否则「装了 Maya 却检测不到」。
+            # Maya 的用户脚本目录**带界面语言子目录**：中文/日文界面下是
+            # ``<版本>/<语言>/scripts``（本机实测 ``2026/zh_CN/scripts``），
+            # 而 ``<版本>/scripts`` 根本不在 ``sys.path`` 里 —— 0.3.1 就是按
+            # ``<版本>/scripts`` 写的，装完 Maya 里 ``import tak`` 直接
+            # ModuleNotFoundError，菜单自然也没有。语言目录必须排在最前。
+            {"os": "windows", "template": "{documents}/maya/{version}/{language}/scripts",
+             "probe": "{documents}/maya/{version}/{language}"},
+            # 英文界面（或未装语言包）回落 `<版本>/scripts`。
+            # ``scripts`` 目录是 Maya 首次需要时才创建的，干净机器上一定不存在，
+            # 因此探测证据用上层目录，写入根仍指向 scripts，由 writer 建目录。
             {"os": "windows", "template": "{documents}/maya/{version}/scripts",
              "probe": "{documents}/maya/{version}"},
+            # 版本无关的共享脚本目录，最后兜底（老版本/特殊布局下只有它）。
+            {"os": "windows", "template": "{documents}/maya/scripts",
+             "probe": "{documents}/maya/scripts"},
+            {"os": "macos", "template": "{home}/Library/Preferences/Autodesk/maya/{version}/{language}/scripts",
+             "probe": "{home}/Library/Preferences/Autodesk/maya/{version}/{language}"},
             {"os": "macos", "template": "{home}/Library/Preferences/Autodesk/maya/{version}/scripts",
              "probe": "{home}/Library/Preferences/Autodesk/maya/{version}"},
+            {"os": "macos", "template": "{home}/Library/Preferences/Autodesk/maya/scripts",
+             "probe": "{home}/Library/Preferences/Autodesk/maya/scripts"},
         ],
+        "language_scan": ["{documents}/maya/{version}",
+                          "{home}/Library/Preferences/Autodesk/maya/{version}"],
         "version_scan": ["{documents}/maya",
                          "{home}/Library/Preferences/Autodesk/maya"],
         "entry_file": "userSetup.py",
@@ -228,6 +244,8 @@ TARGETS = {
 TARGET_ORDER = ("maya", "max", "mobu", "unreal")
 
 _VERSION_DIR_RE = re.compile(r"^(\d{4})")
+#: 界面语言目录名，如 ``zh_CN`` / ``ja_JP`` / ``en_US``
+_LOCALE_DIR_RE = re.compile(r"^[a-z]{2}_[A-Z]{2}$")
 
 
 # --------------------------------------------------------------------- 路径展开
@@ -260,8 +278,8 @@ def _platform_kind() -> str:
     return "linux"
 
 
-def _expand(template: str, version: str = "") -> str:
-    """展开路径模板；缺少 ``{project}`` 等必需值时返回空串。"""
+def _expand(template: str, version: str = "", language: str = "") -> str:
+    """展开路径模板；缺少 ``{project}`` / ``{language}`` 等必需值时返回空串。"""
     if not template:
         return ""
     project = os.environ.get("TAK_UE_PROJECT", "")
@@ -270,6 +288,7 @@ def _expand(template: str, version: str = "") -> str:
         "{documents}": _documents(),
         "{localappdata}": _localappdata(),
         "{version}": version,
+        "{language}": language,
         "{project}": project,
     }
     result = template
@@ -326,6 +345,61 @@ def _resolve_version(target_id: str, spec: Dict[str, Any]) -> str:
     return version or spec["min_version"]
 
 
+def _forced_language() -> str:
+    """用户显式指定的界面语言（``TAK_MAYA_LANG`` / ``MAYA_UI_LANGUAGE``）。"""
+    return (os.environ.get("TAK_MAYA_LANG", "").strip()
+            or os.environ.get("MAYA_UI_LANGUAGE", "").strip())
+
+
+def _resolve_language(target_id: str, spec: Dict[str, Any], version: str) -> str:
+    """定位界面语言子目录（如 ``zh_CN``），用于拼 Maya 的用户脚本路径。
+
+    中文 / 日文界面的 Maya 把用户脚本目录放在 ``<版本>/<语言>/scripts``，
+    而 ``<版本>/scripts`` **不在** ``sys.path`` 里 —— 本机实测
+    ``internalVar(userScriptDir=True)`` 返回
+    ``Documents/maya/2026/zh_CN/scripts/``，同一时刻 sys.path 里根本没有
+    ``Documents/maya/2026/scripts``。按后者写入等于装了个永不执行的块。
+
+    优先级：``TAK_MAYA_LANG`` → ``MAYA_UI_LANGUAGE`` → 扫描语言目录。
+    扫描到多个语言目录时，取 ``prefs`` 目录最近修改的那个（切换界面语言会
+    新建一整套目录），同分时按名字排序以保证确定性。
+    """
+    forced = _forced_language()
+    if forced:
+        return forced
+
+    scan = spec.get("language_scan") or []
+    if isinstance(scan, str):
+        scan = [scan]
+    parents = [_expand(template, version) for template in scan]
+    parents = [path for path in parents if path]
+
+    candidates: List[str] = []
+    for parent in parents:
+        try:
+            names = sorted(os.listdir(parent))
+        except OSError:
+            continue
+        for name in names:
+            if _LOCALE_DIR_RE.match(name) and name not in candidates:
+                candidates.append(name)
+    if not candidates:
+        return ""
+    if len(candidates) == 1:
+        return candidates[0]
+
+    def _prefs_mtime(name: str) -> float:
+        newest = 0.0
+        for parent in parents:
+            try:
+                newest = max(newest, os.path.getmtime(os.path.join(parent, name, "prefs")))
+            except OSError:
+                continue
+        return newest
+
+    return sorted(candidates, key=lambda name: (-_prefs_mtime(name), name))[0]
+
+
 # --------------------------------------------------------------------- 探测入口
 def detect_targets(roots: Optional[Dict[str, str]] = None) -> Dict[str, Dict[str, Any]]:
     """探测四端安装根目录。
@@ -343,6 +417,8 @@ def detect_targets(roots: Optional[Dict[str, str]] = None) -> Dict[str, Dict[str
     for target_id in TARGET_ORDER:
         spec = TARGETS[target_id]
         version = _resolve_version(target_id, spec)
+        language = _resolve_language(target_id, spec, version) if spec.get("language_scan") else ""
+        forced_language = _forced_language() if spec.get("language_scan") else ""
         root = ""
         explicit = False
         detected_dir = False
@@ -357,12 +433,20 @@ def detect_targets(roots: Optional[Dict[str, str]] = None) -> Dict[str, Dict[str
                 root = os.path.normpath(os.path.expanduser(env_root))
             else:
                 for item in _candidate_specs(spec):
-                    candidate = _expand(item.get("template", ""), version)
+                    template = item.get("template", "")
+                    candidate = _expand(template, version, language)
                     if not candidate:
                         continue
+                    # 显式指定语言时不再要求该语言目录已存在：用户的覆盖优先，
+                    # 目录交给 writer 创建（否则这个覆盖开关等于没有）。
+                    if forced_language and "{language}" in template:
+                        root = candidate
+                        detected_dir = True
+                        break
                     # ``probe`` 存在而 ``template`` 尚未创建时，仍认定已安装：
                     # 目录由 writer 在写入前 makedirs。
-                    evidence = _expand(item.get("probe") or "", version) or candidate
+                    evidence = (_expand(item.get("probe") or "", version, language)
+                                or candidate)
                     if os.path.isdir(evidence):
                         root = candidate
                         detected_dir = True
@@ -377,6 +461,7 @@ def detect_targets(roots: Optional[Dict[str, str]] = None) -> Dict[str, Dict[str
             "root": root,
             "entry": entry,
             "version": version,
+            "language": language,
             "explicit": explicit,
         }
     return detected

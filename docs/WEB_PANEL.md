@@ -40,7 +40,7 @@ python -m tak.ui.web.server --port 8765
 
 ```
 [TAK][web] 面板已启动: http://127.0.0.1:8765/
-[TAK][web] 版本 0.3.1 · DCC none
+[TAK][web] 版本 0.3.2 · DCC none
 ```
 
 默认会自动打开系统浏览器；`--no-browser` 可关闭。参数：

@@ -30,25 +30,41 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 假 maya.cmds
 # --------------------------------------------------------------------------- #
 class FakeCmds:
-    """记录调用的最小 cmds 替身；只实现 menu.py 真正用到的那几个函数。"""
+    """记录调用的最小 cmds 替身；只实现 menu.py 真正用到的那几个函数。
 
-    def __init__(self, window="MayaWindow"):
+    ``ui=False`` 复现 batch / 无界面启动下的真实行为：``cmds.menu`` 与
+    ``cmds.window`` **不抛异常，直接返回 False**，窗口也不存在。老实现只判
+    ``menu is None``，在这种宿主里会报 ``ok=True`` 却什么都没建。
+    """
+
+    def __init__(self, window="MayaWindow", ui=True):
         self.window = window
+        self.ui = ui
         self.calls = []
         self.menus = {}
         self.items = []
+        #: False 时 ``menu()`` 返回名字但**不记录**，模拟"看起来成功其实没建"
+        self.honor_menus = True
 
     # -- 被 menu.py 调用的接口 ------------------------------------------- #
-    def about(self, what=None, q=False, **kwargs):
-        self.calls.append(("about", what, q))
-        return self.window
+    def window(self, name=None, q=False, exists=False, **kwargs):
+        self.calls.append(("window", name, dict(kwargs, q=q, exists=exists)))
+        if exists:
+            return bool(self.ui) and name == self.window
+        return name
 
-    def menu(self, name=None, **kwargs):
-        self.calls.append(("menu", name, dict(kwargs)))
-        if kwargs.get("exists"):
+    def lsUI(self, window=False, **kwargs):
+        self.calls.append(("lsUI", None, dict(kwargs, window=window)))
+        return [self.window] if self.ui else []
+
+    def menu(self, name=None, q=False, exists=False, **kwargs):
+        self.calls.append(("menu", name, dict(kwargs, q=q, exists=exists)))
+        if exists:
             return name in self.menus
-        if kwargs.get("query"):
+        if q:
             return self.menus.get(name)
+        if not self.honor_menus:
+            return name
         self.menus[name] = dict(kwargs)
         return name
 
@@ -69,6 +85,17 @@ class FakeCmds:
 def fake_host(monkeypatch):
     """注入一个假的 ``maya`` 包；返回 FakeCmds 供断言。"""
     cmds = FakeCmds()
+    package = ModuleType("maya")
+    package.cmds = cmds
+    monkeypatch.setitem(sys.modules, "maya", package)
+    monkeypatch.setitem(sys.modules, "maya.cmds", cmds)
+    return cmds
+
+
+@pytest.fixture()
+def headless_host(monkeypatch):
+    """无界面宿主（batch）：有 ``maya.cmds``，但没有主窗口。"""
+    cmds = FakeCmds(ui=False)
     package = ModuleType("maya")
     package.cmds = cmds
     monkeypatch.setitem(sys.modules, "maya", package)
@@ -138,10 +165,39 @@ def test_register_builds_menu_and_items(fake_host):
     assert ("---", menu.MENU_NAME) in fake_host.items
 
 
-def test_register_uses_newer_main_window_api(fake_host):
+def test_register_falls_back_to_lsui_window(fake_host):
+    """主窗口不叫 MayaWindow/mayaMainWindow 时，用 lsUI(window=True) 兜底。"""
     fake_host.window = "MayaWindow_2026"
     assert menu.register_menu()["ok"] is True
     assert fake_host.menus[menu.MENU_NAME]["parent"] == "MayaWindow_2026"
+
+
+def test_main_window_never_uses_about_flag(fake_host):
+    """``cmds.about(mayaMainWindow=True)`` 在 Maya 2026 是非法标志，不许再调。"""
+    menu.register_menu()
+    assert all(call[0] != "about" for call in fake_host.calls)
+
+
+def test_register_fails_loudly_when_no_main_window(headless_host):
+    """batch / 无界面：必须 ok=False 且说明原因，不能假成功。
+
+    真实证据：``mayabatch -script`` 里 ``cmds.menu(...)`` 返回 False 不抛异常，
+    ``cmds.window("MayaWindow", q=True, exists=True)`` 也是 False。老实现只判
+    ``menu is None``，于是报 ``ok=True, items=7`` —— 菜单其实一个都没建。
+    """
+    result = menu.register_menu()
+    assert result["ok"] is False
+    assert "找不到 Maya 主窗口" in result["reason"]
+    # 没有真建菜单，就不能留下"已注册"的痕迹
+    assert headless_host.menus == {}
+
+
+def test_register_verifies_menu_actually_exists(fake_host):
+    """宿主返回了菜单名却没真建（静默 no-op）时，不许报成功。"""
+    fake_host.honor_menus = False
+    result = menu.register_menu()
+    assert result["ok"] is False
+    assert "未真正创建菜单" in result["reason"]
 
 
 def test_register_is_idempotent(fake_host):

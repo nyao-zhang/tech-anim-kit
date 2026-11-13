@@ -1,0 +1,31 @@
+{
+  "batch": true,
+  "dispatch_about": {
+    "action": "tak_about",
+    "menu": "TAK",
+    "ok": true,
+    "repo_root": "C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35",
+    "version": "0.3.2"
+  },
+  "errors": [],
+  "inside_maya": true,
+  "maya_version": "2026",
+  "register": {
+    "menu": "TAK",
+    "ok": false,
+    "reason": "找不到 Maya 主窗口，菜单无法注册（batch 或无界面启动时属正常）：cmds.about(mayaMainWindow) 在 Maya 2026 已非法，window -q -exists 与 lsUI(window=True) 也都没有结果"
+  },
+  "sys_path_maya": [
+    "C:/Users/NYAO/Documents/maya/2026/zh_CN/scripts/site-packages",
+    "C:/Users/NYAO/Documents/maya/2026/zh_CN/prefs/scripts",
+    "C:/Users/NYAO/Documents/maya/2026/zh_CN/scripts",
+    "C:/Users/NYAO/Documents/maya/scripts",
+    "C:/Users/NYAO/Documents/maya//scripts"
+  ],
+  "sys_path_total": 44,
+  "tak_file": "C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35\\tak\\__init__.py",
+  "tak_importable": true,
+  "tak_version": "0.3.2",
+  "user_app_dir": "C:/Users/NYAO/Documents/maya/",
+  "user_script_dir": "C:/Users/NYAO/Documents/maya/2026/zh_CN/scripts/"
+}

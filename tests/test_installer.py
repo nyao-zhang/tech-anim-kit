@@ -742,7 +742,9 @@ def _fake_home(monkeypatch, tmp_path):
     monkeypatch.setattr(targets, "_home", lambda: str(home))
     for env in ("TAK_MAYA_ROOT", "TAK_MAX_ROOT", "TAK_MOBU_ROOT",
                 "TAK_UE_PROJECT", "TAK_MAYA_VERSION", "TAK_MAX_VERSION",
-                "TAK_MOBU_VERSION", "TAK_UE_VERSION"):
+                "TAK_MOBU_VERSION", "TAK_UE_VERSION",
+                # 界面语言会改变 Maya 的用户脚本路径，不清掉用例就不确定
+                "TAK_MAYA_LANG", "MAYA_UI_LANGUAGE"):
         monkeypatch.delenv(env, raising=False)
     return home
 
@@ -813,20 +815,6 @@ def test_install_creates_missing_scripts_dir(monkeypatch, tmp_path):
 # --------------------------------------------------------------------------- #
 # 探测：干净机器上没有 scripts 目录也必须认得出来
 # --------------------------------------------------------------------------- #
-def _fake_home(monkeypatch, tmp_path):
-    """把 home 指到 tmp，并清掉四端环境变量，避免读到真机。"""
-    from tak.install import targets
-
-    home = tmp_path / "home"
-    (home / "Documents").mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(targets, "_home", lambda: str(home))
-    for env in ("TAK_MAYA_ROOT", "TAK_MAX_ROOT", "TAK_MOBU_ROOT",
-                "TAK_UE_PROJECT", "TAK_MAYA_VERSION", "TAK_MAX_VERSION",
-                "TAK_MOBU_VERSION", "TAK_UE_VERSION"):
-        monkeypatch.delenv(env, raising=False)
-    return home
-
-
 def test_detect_maya_when_scripts_dir_absent(monkeypatch, tmp_path):
     """Maya 的 ``scripts`` 目录是首次需要时才建的，干净机器上一定没有。
 
@@ -946,3 +934,177 @@ def test_max_block_reports_menu_state():
     """3ds Max 走 MaxScript，诊断由 init_max.initialize() 打印；这里锁住调用本身。"""
     template = targets_mod.TARGETS["max"]["block_template"]
     assert "_tak_max.initialize()" in template
+
+
+# --------------------------------------------------------------------------- #
+# 探测：Maya 的用户脚本目录带界面语言子目录
+#
+# 0.3.1 的真实事故：中文界面的 Maya 2026，`internalVar(userScriptDir=True)` 返回
+# `Documents/maya/2026/zh_CN/scripts/`，而 `Documents/maya/2026/scripts` 根本不在
+# sys.path 里。安装器按后者写入，装完 Maya 里 `import tak` 直接 ModuleNotFoundError。
+# --------------------------------------------------------------------------- #
+def test_detect_maya_prefers_language_subdir(monkeypatch, tmp_path):
+    """有 ``zh_CN`` 这类语言目录时，必须写进 ``<版本>/<语言>/scripts``。"""
+    from tak.install.targets import detect_targets
+
+    home = _fake_home(monkeypatch, tmp_path)
+    (home / "Documents" / "maya" / "2026" / "zh_CN").mkdir(parents=True)
+    found = detect_targets()["maya"]
+    assert found["found"] is True
+    assert found["language"] == "zh_CN"
+    assert found["root"].endswith(os.path.join("maya", "2026", "zh_CN", "scripts"))
+
+
+def test_detect_maya_english_uses_version_scripts(monkeypatch, tmp_path):
+    """没有语言目录（英文界面）时回落 ``<版本>/scripts``。"""
+    from tak.install.targets import detect_targets
+
+    home = _fake_home(monkeypatch, tmp_path)
+    (home / "Documents" / "maya" / "2026").mkdir(parents=True)
+    found = detect_targets()["maya"]
+    assert found["language"] == ""
+    assert found["root"].endswith(os.path.join("maya", "2026", "scripts"))
+
+
+def test_detect_maya_language_env_override(monkeypatch, tmp_path):
+    """``TAK_MAYA_LANG`` 可强制指定语言目录（Maya 未装但想预置配置时用）。"""
+    from tak.install.targets import detect_targets
+
+    home = _fake_home(monkeypatch, tmp_path)
+    (home / "Documents" / "maya" / "2026" / "zh_CN").mkdir(parents=True)
+    monkeypatch.setenv("TAK_MAYA_LANG", "ja_JP")
+    found = detect_targets()["maya"]
+    assert found["language"] == "ja_JP"
+    assert found["root"].endswith(os.path.join("maya", "2026", "ja_JP", "scripts"))
+
+
+def test_detect_maya_single_locale_is_deterministic(monkeypatch, tmp_path):
+    """只有一个语言目录时不需要猜，直接用它。"""
+    from tak.install.targets import detect_targets
+
+    home = _fake_home(monkeypatch, tmp_path)
+    (home / "Documents" / "maya" / "2024" / "ja_JP").mkdir(parents=True)
+    assert detect_targets()["maya"]["language"] == "ja_JP"
+
+
+def test_detect_maya_multiple_locales_picks_latest_prefs(monkeypatch, tmp_path):
+    """两个语言目录并存时，取 prefs 最近修改的那个（切换界面语言会新建一套）。"""
+    from tak.install.targets import detect_targets
+
+    home = _fake_home(monkeypatch, tmp_path)
+    older = home / "Documents" / "maya" / "2026" / "en_US" / "prefs"
+    newer = home / "Documents" / "maya" / "2026" / "zh_CN" / "prefs"
+    older.mkdir(parents=True)
+    newer.mkdir(parents=True)
+    os.utime(str(older), (1_600_000_000, 1_600_000_000))
+    os.utime(str(newer), (1_700_000_000, 1_700_000_000))
+    assert detect_targets()["maya"]["language"] == "zh_CN"
+
+
+def test_install_writes_into_language_scripts_dir(monkeypatch, tmp_path):
+    """端到端：install 必须把块写进语言子目录，而不是 ``<版本>/scripts``。"""
+    from tak.install.targets import detect_targets
+    from tak.install.writer import apply_plan, plan_install
+
+    home = _fake_home(monkeypatch, tmp_path)
+    (home / "Documents" / "maya" / "2026" / "zh_CN").mkdir(parents=True)
+
+    plan = plan_install(repo_root=str(tmp_path), targets=["maya"],
+                        roots={"maya": detect_targets()["maya"]["root"]},
+                        dry_run=False)
+    summary = apply_plan(plan)
+    assert summary["ok"] is True
+
+    good = os.path.join(str(home), "Documents", "maya", "2026", "zh_CN",
+                        "scripts", "userSetup.py")
+    dead = os.path.join(str(home), "Documents", "maya", "2026", "scripts",
+                        "userSetup.py")
+    assert os.path.isfile(good), "语言目录里没有写入"
+    assert not os.path.exists(dead), "又写回了 Maya 不扫描的 <版本>/scripts"
+
+
+# --------------------------------------------------------------------------- #
+# 探测：Maya 的用户脚本目录带界面语言子目录
+#
+# 0.3.1 的真实事故：中文界面的 Maya 2026，`internalVar(userScriptDir=True)` 返回
+# `Documents/maya/2026/zh_CN/scripts/`，而 `Documents/maya/2026/scripts` 根本不在
+# sys.path 里。安装器按后者写入，装完 Maya 里 `import tak` 直接 ModuleNotFoundError。
+# --------------------------------------------------------------------------- #
+def test_detect_maya_prefers_language_subdir(monkeypatch, tmp_path):
+    """有 ``zh_CN`` 这类语言目录时，必须写进 ``<版本>/<语言>/scripts``。"""
+    from tak.install.targets import detect_targets
+
+    home = _fake_home(monkeypatch, tmp_path)
+    (home / "Documents" / "maya" / "2026" / "zh_CN").mkdir(parents=True)
+    found = detect_targets()["maya"]
+    assert found["found"] is True
+    assert found["language"] == "zh_CN"
+    assert found["root"].endswith(os.path.join("maya", "2026", "zh_CN", "scripts"))
+
+
+def test_detect_maya_english_uses_version_scripts(monkeypatch, tmp_path):
+    """没有语言目录（英文界面）时回落 ``<版本>/scripts``。"""
+    from tak.install.targets import detect_targets
+
+    home = _fake_home(monkeypatch, tmp_path)
+    (home / "Documents" / "maya" / "2026").mkdir(parents=True)
+    found = detect_targets()["maya"]
+    assert found["language"] == ""
+    assert found["root"].endswith(os.path.join("maya", "2026", "scripts"))
+
+
+def test_detect_maya_language_env_override(monkeypatch, tmp_path):
+    """``TAK_MAYA_LANG`` 可强制指定语言目录（Maya 未装但想预置配置时用）。"""
+    from tak.install.targets import detect_targets
+
+    home = _fake_home(monkeypatch, tmp_path)
+    (home / "Documents" / "maya" / "2026" / "zh_CN").mkdir(parents=True)
+    monkeypatch.setenv("TAK_MAYA_LANG", "ja_JP")
+    found = detect_targets()["maya"]
+    assert found["language"] == "ja_JP"
+    assert found["root"].endswith(os.path.join("maya", "2026", "ja_JP", "scripts"))
+
+
+def test_detect_maya_single_locale_is_deterministic(monkeypatch, tmp_path):
+    """只有一个语言目录时不需要猜，直接用它。"""
+    from tak.install.targets import detect_targets
+
+    home = _fake_home(monkeypatch, tmp_path)
+    (home / "Documents" / "maya" / "2024" / "ja_JP").mkdir(parents=True)
+    assert detect_targets()["maya"]["language"] == "ja_JP"
+
+
+def test_detect_maya_multiple_locales_picks_latest_prefs(monkeypatch, tmp_path):
+    """两个语言目录并存时，取 prefs 最近修改的那个（切换界面语言会新建一套）。"""
+    from tak.install.targets import detect_targets
+
+    home = _fake_home(monkeypatch, tmp_path)
+    older = home / "Documents" / "maya" / "2026" / "en_US" / "prefs"
+    newer = home / "Documents" / "maya" / "2026" / "zh_CN" / "prefs"
+    older.mkdir(parents=True)
+    newer.mkdir(parents=True)
+    os.utime(str(older), (1_600_000_000, 1_600_000_000))
+    os.utime(str(newer), (1_700_000_000, 1_700_000_000))
+    assert detect_targets()["maya"]["language"] == "zh_CN"
+
+
+def test_install_writes_into_language_scripts_dir(monkeypatch, tmp_path):
+    """端到端：install 必须把块写进语言子目录，而不是 ``<版本>/scripts``。"""
+    from tak.install.targets import detect_targets
+    from tak.install.writer import apply_plan, plan_install
+
+    home = _fake_home(monkeypatch, tmp_path)
+    (home / "Documents" / "maya" / "2026" / "zh_CN").mkdir(parents=True)
+
+    plan = plan_install(repo_root=str(tmp_path), targets=["maya"],
+                        roots={"maya": detect_targets()["maya"]["root"]},
+                        dry_run=False)
+    summary = apply_plan(plan)
+    assert summary["ok"] is True
+
+    good = os.path.join(str(home), "Documents", "maya", "2026", "zh_CN",
+                        "scripts", "userSetup.py")
+    dead = os.path.join(str(home), "Documents", "maya", "2026", "scripts",
+                        "userSetup.py")
+    assert os.path.isfile(good), "语言目录里没有写入"
+    assert not os.path.exists(dead), "又写回了 Maya 不扫描的 <版本>/scripts"
