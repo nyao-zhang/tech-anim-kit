@@ -1,0 +1,139 @@
+{
+  "ok": true,
+  "steps": [
+    {
+      "step": "bootstrap",
+      "repo_root": "C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35"
+    },
+    {
+      "step": "scene_built",
+      "nodes": {
+        "joints": [
+          "root",
+          "hips",
+          "spine_01"
+        ],
+        "orphan": "junk_orphan_grp",
+        "mirror": "mirror_grp",
+        "control": "l_arm_ctrl",
+        "colored_control": "r_arm_ctrl",
+        "mesh": "body_mesh",
+        "ref_src": "C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35\\validation\\_tmp_health\\prop_src.ma"
+      }
+    },
+    {
+      "step": "health_collected",
+      "present": true,
+      "keys": [
+        "_meta",
+        "control_colors",
+        "duplicate_shapes",
+        "negative_scale",
+        "orphan_nodes",
+        "references"
+      ],
+      "orphan_nodes": [
+        "junk_orphan_grp"
+      ],
+      "negative_scale": [
+        "mirror_grp"
+      ],
+      "control_colors": {
+        "l_arm_ctrl": null,
+        "r_arm_ctrl": 13
+      },
+      "duplicate_shapes": [],
+      "references": [],
+      "coverage": {
+        "collected": [
+          "control_colors",
+          "duplicate_shapes",
+          "negative_scale",
+          "orphan_nodes",
+          "references"
+        ],
+        "not_provided": {
+          "unfrozen_transforms": "该键一旦存在，规则会跳过 joints 推断；关节的未冻结变换由规则自身从快照读取",
+          "max_influences": "影响骨上限来自规范而不是场景，由规则回落到 spec"
+        },
+        "errors": {},
+        "source": "tak.adapters.maya"
+      },
+      "health_error": null
+    },
+    {
+      "step": "orphan_assertion",
+      "caught_orphan": true,
+      "missed_mesh": true,
+      "missed_joints": true,
+      "missed_mirror": true,
+      "total": 1
+    },
+    {
+      "step": "color_assertion",
+      "uncolored_caught": true,
+      "colored_has_index": true,
+      "entries": [
+        "l_arm_ctrl",
+        "r_arm_ctrl"
+      ]
+    },
+    {
+      "step": "reference_healthy",
+      "entries": [],
+      "silent": true
+    },
+    {
+      "step": "reference_missing",
+      "caught": true,
+      "entries": [
+        {
+          "node": "propRN",
+          "file": "C:/Users/NYAO/WorkBuddy/2026-11-12-23-27-35/validation/_tmp_health/prop_src.ma",
+          "loaded": true,
+          "missing": true
+        }
+      ]
+    },
+    {
+      "step": "rules_ran",
+      "passed": false,
+      "finding_count": 3,
+      "rule_ids": [
+        "rig_health_guard.control_uncolored",
+        "rig_health_guard.negative_scale",
+        "rig_health_guard.orphan_nodes"
+      ],
+      "health_gaps": [],
+      "pseudo_pass": true
+    },
+    {
+      "step": "rules_detail",
+      "findings": [
+        {
+          "rule_id": "rig_health_guard.negative_scale",
+          "severity": "error",
+          "node": "mirror_grp"
+        },
+        {
+          "rule_id": "rig_health_guard.orphan_nodes",
+          "severity": "warning",
+          "node": "junk_orphan_grp"
+        },
+        {
+          "rule_id": "rig_health_guard.control_uncolored",
+          "severity": "info",
+          "node": "l_arm_ctrl"
+        }
+      ]
+    },
+    {
+      "step": "partial_gap",
+      "has_partial_notice": true,
+      "rule_ids": [
+        "qa_inspector.health.partial"
+      ]
+    }
+  ],
+  "error": ""
+}

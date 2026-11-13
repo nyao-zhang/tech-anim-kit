@@ -274,7 +274,9 @@ def _ai_modules() -> Dict[str, bool]:
     import importlib.util
 
     found = {}
-    for name in ("agent", "knowledge", "vision", "mapping"):
+    # 只探测真实存在的内核模块：mapping / motion 在 0.4.0 已随工具一起删除，
+    # 留着它们会让 /api/health 声称「支持骨骼映射」而实际调用必然 503。
+    for name in ("agent", "knowledge", "vision"):
         try:
             found[name] = importlib.util.find_spec("tak.core.%s" % name) is not None
         except Exception:
@@ -380,66 +382,6 @@ def _api_vision(body: Any) -> Dict[str, Any]:
     return {"ok": bool(result.get("ok", True)), "result": result}
 
 
-def _api_mapping(body: Any) -> Dict[str, Any]:
-    try:
-        from tak.core.mapping import map_skeleton
-    except Exception as exc:
-        raise ApiError(503, "骨骼映射模块未就绪: %s: %s"
-                       % (type(exc).__name__, exc))
-    data = _parse_body(body)
-    source = data.get("source_bones")
-    target = data.get("target_bones")
-    if not isinstance(source, list) or not isinstance(target, list):
-        raise ApiError(400, "source_bones / target_bones 必须是数组")
-    options = data.get("options") if isinstance(data.get("options"), dict) else {}
-    result = map_skeleton(source, target, options=options)
-    return {"ok": True, "result": result}
-
-
-def _api_motion(body: Any) -> Dict[str, Any]:
-    """动作资产语义检索：只读、离线、确定性排序。
-
-    ``query`` 为空表示「列出全部」，此时仍按 clip_id 升序返回，方便 UI 直接浏览。
-    ``options.filters`` 是**硬过滤**（不满足直接排除，不是降权），因此服务端
-    在这里把类型收窄一次，避免把非法过滤值透传给内核。
-    """
-    try:
-        from tak.core.motion import MotionLibrary
-    except Exception as exc:
-        raise ApiError(503, "动作检索模块未就绪: %s: %s"
-                       % (type(exc).__name__, exc))
-    data = _parse_body(body)
-    query = data.get("query")
-    query = "" if query is None else str(query)
-    try:
-        top_k = max(1, min(20, int(data.get("top_k") or 8)))
-    except (TypeError, ValueError):
-        raise ApiError(400, "top_k 必须是 1-20 的整数")
-    options = data.get("options") if isinstance(data.get("options"), dict) else {}
-    filters = options.get("filters")
-    filters = dict(filters) if isinstance(filters, dict) else {}
-    for key in ("min_duration", "max_duration", "min_fps"):
-        if key in filters:
-            try:
-                filters[key] = float(filters[key])
-            except (TypeError, ValueError):
-                filters.pop(key, None)
-    for key in ("loopable", "root_motion"):
-        if key in filters:
-            filters[key] = bool(filters[key])
-    cleaned = {"filters": filters}
-    motion_type = options.get("motion_type")
-    if isinstance(motion_type, str) and motion_type.strip():
-        cleaned["motion_type"] = motion_type.strip().lower()
-    library = MotionLibrary()
-    hits = library.search(query, top_k=top_k, options=cleaned)
-    return {"ok": True, "query": query, "top_k": top_k, "count": len(hits),
-            "hits": hits, "stats": library.describe(),
-            "warning": ("" if hits else "未命中任何动作；可清空关键词列出全部，"
-                                        "或放宽时长 / 循环 / 根位移筛选")}
-
-
-
 def handle_api(method: str, path: str, body: Any = None,
                query: Optional[Dict[str, Any]] = None,
                repo_root: Optional[str] = None) -> Tuple[int, Dict[str, Any]]:
@@ -491,14 +433,6 @@ def handle_api(method: str, path: str, body: Any = None,
             if method != "POST":
                 raise ApiError(405, "该接口只接受 POST")
             return 200, _api_vision(body)
-        if route == "/api/mapping":
-            if method != "POST":
-                raise ApiError(405, "该接口只接受 POST")
-            return 200, _api_mapping(body)
-        if route == "/api/motion":
-            if method != "POST":
-                raise ApiError(405, "该接口只接受 POST")
-            return 200, _api_motion(body)
         raise ApiError(404, "未知接口: %s" % route)
     except ApiError as exc:
         return exc.status, {"ok": False, "error": exc.message}

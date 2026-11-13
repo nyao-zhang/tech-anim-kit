@@ -13,6 +13,94 @@
 
 （无）
 
+## [0.5.0] - 2026-11-15
+
+把「工具集」接上外部世界。0.4.0 解决了「工具怎么组织」，这一版解决
+「**别人怎么用我的工具，我怎么用别人的工具**」—— 也就是你点名的那三件事：
+对话控制台应该能连 WorkBuddy、设置里应该能导入第三方插件、场景体检不该
+永远是空的。
+
+### Added
+
+- **`tak/core/bridge.py` 本地桥**：DCC 侧监听 `127.0.0.1`，把场景查询、工具运行、
+  对话暴露成 HTTP，外部 AI 与脚本用 `X-TAK-Token` 调进来。五个端点：
+  `/bridge/health`、`/bridge/tools`、`/bridge/scene`、`/bridge/run`、`/bridge/chat`。
+  发现文件 `~/.tak/bridge.json`，审计日志 `~/.tak/bridge.log`（512 KB 滚动）。
+  `python -m tak.core.bridge status|scene|tools|run|chat` 可直接排查。
+- **`tak/core/ai/connection.py` AI 端点解析**：`base_url` / `model` / 密钥**环境
+  变量名**进配置（密钥本身不落盘），`probe()` 发一次 8 token 的请求，把
+  401 / 404 / 429 / 超时翻译成「下一步该改什么」。
+- **`tak/core/importer.py` 第三方工具导入器**：`analyze()` 只做 `ast` 解析不执行
+  脚本，`draft_manifest()` 生成可直接用的 manifest，`install()` 复制到
+  `~/.tak/plugins/<id>/` 并写两个薄壳。设置面板新增「导入工具」页：
+  选脚本 → 分析 → 改说明 → 安装，可勾选「用 AI 补全说明与用法」。
+- **`tak/core/importer_runtime.py` 导入插件运行时**：有 `run_report`/`run` 的直接
+  转调；只有 `show()` 的去开它自己的窗口；两者都没有的按原样执行并如实回报。
+- **Maya 适配器采集 `metadata.health`**（`_collect_health`）：孤立节点、负缩放、
+  重复 shape、可疑 reference、控制器上色五类，每类都是最窄判据。
+  场景卫生 9 条规则第一次在真 Maya 里有数据。
+- `tak.core.registry.user_plugin_dir()`：`~/.tak/plugins` 默认进搜索路径，
+  导入完不用再设环境变量。
+
+### Changed
+
+- `get_provider()` 的离线默认值改为「**跟着钥匙走**」：有密钥就可连，没密钥
+  才离线。以前默认一律离线，用户配好地址和密钥仍然连不上，还得再找一个
+  界面上没写的 `TAK_AI_OFFLINE=0`。
+- 模型选择：显式 `model` > 配置 `ai.model` > 任务路由。配置里没写模型时
+  不再用默认值顶掉 vision → MiniMax 这类路由。
+- Web 面板收缩为**只读报告看板**：`kb` / `mapping` / `motion` 三个页签里，
+  后两个后端模块已随工具删除，接口与前端代码一并移除（`/api/motion`、
+  `/api/mapping` 现在返回 404，`/api/health` 的能力表也不再谎报）。
+
+### Fixed
+
+- **空场景跑出 19 条「缺少必需关节」**（0.4.0 遗留的真问题）：降级适配器返回
+  `{"joints": {}, "metadata": {"degraded": ...}}`，长得像有数据。现在判据是
+  「键存在**且** `degraded` 为空」。
+- **场景卫生 9 条规则永远是空的**：适配器从来不采集 `metadata.health`，规则读不到
+  就整组静默退出，面板显示「通过」。现在适配器采了 5 类，另 2 类显式声明
+  「不采」并给理由（`unresolved_transforms` 会屏蔽规则自身的快照推断，
+  `max_influences` 属于规范而不是场景）。
+- **`qa_inspector` 的「假通过」**：四类只依赖 `metadata.health` 的检查在快照
+  缺字段时会安静返回 0 条结论。现在补一条 `qa_inspector.health.partial`，
+  点名哪几项没查、为什么。
+- **导入的工具「跑完就是通过」**：没有 TAK 契约的脚本执行完毕曾经 `passed=True`，
+  结论里却写着「未判定」。真机探针抓到后改成 ERROR 级，`passed` 与文案对齐。
+- **桥在宿主主线程被占住时无限挂起**：`executeInMainThreadWithResult` 靠 idle
+  队列执行，主线程卡住就永不返回。现在 `_host_call` 硬超时（默认 15s）并回 503，
+  附带"主线程可能被对话框占住"的提示。
+
+### Removed
+
+- `tak/ui/web/app.js` 里 `/api/motion`、`/api/mapping` 的调用与两个页签。
+- `tak/core/registry.py` 不再把「用户导入的插件」混进内置插件发现（`include_user=False`）。
+
+### Known limitations
+
+- **绑定规范里 `unfrozen_transform` 仍靠规则从快照推断**：适配器刻意不上报该键，
+  否则规则会跳过 joints 推断。两者不能同时用。
+- **导入器只支持 Python 脚本**，且假设依赖在宿主 Python 里可 import（`.mll` /
+  `.pyd` 二进制插件不在范围内）。
+- **AI 补全依赖端点可用**：没配密钥时导入照常完成，只是说明字段是确定性的
+  草稿（`ai_fields` 为空，UI 会说明）。
+- **桥的写场景能力故意不开放**：`/bridge/chat` 只读，confirm 流程只能在 DCC
+  面板里人工点。
+- **mayabatch 下调用桥会超时**（主线程不泵 idle 队列）：这不是 bug，是 batch
+  没有事件循环。真机验证必须用 `maya.exe`。
+
+### 验证
+
+| 项 | 结果 |
+|---|---|
+| `python -m pytest -q` | exit=0，全绿 |
+| `validation/py_compat_smoke.py` | PASS（Python 3.9 语法/API 检查） |
+| Maya 2026 GUI 桥探针 `validation/bridge_probe_result.json` | `ok=true`：`thread_safe=true`、无 token 401、场景 2 关节、health 5 类、`qa_inspector` 抓到孤立节点与未上色控制器、chat 走通 |
+| Maya 2026 GUI 面板探针 `validation/qt_panel_probe_result.json` | `ok=true`：设置 4 页签（含「导入工具」）、导入一个真脚本后出现在工具列表、运行后 `imported.no_contract` 且 `passed=false`、卸载干净 |
+| Maya 2026 batch `validation/maya_health_probe_result.json` | `ok=true`：孤立节点只抓垃圾节点、镜像组只报负缩放不重复、missing reference 被识别、healthy reference 不误报 |
+
+---
+
 ## [0.4.0] - 2026-11-14
 
 一次结构性重构，起因是一条很直接的反馈：**「所有工具运行都是各种体检」**。
@@ -342,6 +430,7 @@ Finding 表，各工具自带的 `ui_qt.show()` 从来没有被调用过；`mani
 ---
 
 [Unreleased]: #unreleased
+[0.5.0]: #050---2026-11-15
 [0.3.3]: #033---2026-11-14
 [0.3.2]: #032---2026-11-14
 [0.3.1]: #031---2026-11-13

@@ -1,0 +1,84 @@
+{
+  "ok": true,
+  "steps": [
+    {
+      "step": "scene_built",
+      "nodes": {
+        "root": "root",
+        "hips": "hips",
+        "junk": "junk_orphan_grp",
+        "control": "l_arm_ctrl"
+      }
+    },
+    {
+      "step": "bridge_started",
+      "ok": true,
+      "port": 62140,
+      "url": "http://127.0.0.1:62140",
+      "thread_safe": true,
+      "thread_note": "宿主调用经 maya.utils 回到主线程"
+    },
+    {
+      "step": "health",
+      "status": 200,
+      "auth_required": true
+    },
+    {
+      "step": "auth_denied",
+      "status": 401,
+      "error": "缺少或错误的 X-TAK-Token"
+    },
+    {
+      "step": "scene",
+      "status": 200,
+      "joint_count": 2,
+      "joints_preview": [
+        "hips",
+        "root"
+      ],
+      "health_keys": [
+        "control_colors",
+        "duplicate_shapes",
+        "negative_scale",
+        "orphan_nodes",
+        "references"
+      ],
+      "scene_file": ""
+    },
+    {
+      "step": "tools",
+      "status": 200,
+      "ids": [
+        "mldeformer_factory",
+        "defect_inspector",
+        "qa_inspector",
+        "agent_console",
+        "asset_pipeline"
+      ]
+    },
+    {
+      "step": "run",
+      "status": 200,
+      "ok": true,
+      "passed": true,
+      "finding_count": 2,
+      "rule_ids": [
+        "rig_health_guard.control_uncolored",
+        "rig_health_guard.orphan_nodes"
+      ],
+      "nodes": [
+        "junk_orphan_grp",
+        "l_arm_ctrl"
+      ],
+      "health_gaps": []
+    },
+    {
+      "step": "chat",
+      "status": 200,
+      "ok": true,
+      "intent": "explain",
+      "note": "桥只提供只读对话；写场景请在 DCC 面板内确认执行。"
+    }
+  ],
+  "error": ""
+}

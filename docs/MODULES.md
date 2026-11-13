@@ -102,7 +102,8 @@
 
 ## 7. 当前能力边界
 
-- **Maya 适配器不采集 `metadata.health`**，所以「场景卫生」那 9 条在真实 Maya 里会跳过，显示为「未执行」而不是「通过」。这是已知缺口。
+- **场景卫生 9 条在真 Maya 里已经有数据**（v0.5.0 起适配器采集 `metadata.health`，五类）；`unfrozen_transform` 仍由规则从快照推断，适配器刻意不上报该键 —— 两者不能同时用。
+- **导入的第三方工具只支持 Python**，且依赖必须能在宿主 Python 里 import；`.mll` / `.pyd` 二进制插件不在范围内。
 - **ML Deformer 不做训练**。UE 5.8 的 Python 侧没有暴露 `MLDeformerAsset` / `NeuralMorphModel` 的训练入口，本工具负责采样、建集、验质和数据集导出，训练交给 UE 的 ML Deformer 训练器。
 - **VLM 缺陷检查依赖视觉模型**。离线时退化为几何启发式候选，报告里会标明是哪一种。
 - **Web 面板是只读报告看板**，见下节。
@@ -114,7 +115,49 @@ Web 面板**不是**第二个工具入口。它的实际场景只有两个：
 1. **跨人看报告** —— 在 Maya 里跑完检查，把报告以 HTML 形式发链接给主管或同事，对方不需要装 Maya、不需要许可、不需要同步插件版本；
 2. **离线回看** —— 历史报告留在浏览器里，不依赖 DCC 进程。
 
-因此它只保留报告页与只读 API，去掉了知识库、骨骼映射、动作检索三个页签 —— 那三个功能要么已经删掉，要么属于工具自己的 Qt 界面。日常操作请用 Qt 面板。
+因此它只保留报告页与只读 API。v0.5.0 把「骨骼映射」「动作检索」两个页签连同后端接口一起删了 —— 它们的核心模块在 0.4.0 就随工具移除，留着页签只会点出一个 503。现存页签是「对话候选 / 知识库 / 抽帧诊断」。日常操作请用 Qt 面板。
+
+## 8.1 外部怎么调 DCC（本地桥）
+
+工具集对外只有一条通道：**DCC 里开一个只监听 `127.0.0.1` 的 HTTP 桥**。
+
+在「对话控制台 → 桥接设置」里启动，或用 `tak.core.bridge.start_bridge()`。启动后写
+`~/.tak/bridge.json`（含 url / port / dcc），外部按它找到桥：
+
+| 端点 | 作用 | 是否要 token |
+|---|---|---|
+| `GET /bridge/health` | 探活，只回版本号，**不带任何场景数据** | 否 |
+| `GET /bridge/tools` | 可见工具列表 | 是 |
+| `GET /bridge/scene[?full=1]` | 场景摘要（默认只给 40 个关节名，`full=1` 才全量） | 是 |
+| `POST /bridge/run` | `{tool_id, options?}` 跑一个工具，回 finding 摘要 | 是 |
+| `POST /bridge/chat` | `{message}` 只读对话 | 是 |
+
+```bash
+TOKEN=$(python -c "from tak.core import config;print(config.load()['bridge']['token'])")
+curl -H "X-TAK-Token: $TOKEN" http://127.0.0.1:<port>/bridge/scene
+python -m tak.core.bridge status          # 桥没开时也能看到提示
+```
+
+三条边界：
+
+1. **写场景不开放**。`/bridge/chat` 只读，`/bridge/run` 只跑工具插件（插件的
+   `run_report` 阶段不写场景）。要改场景，只能在 DCC 面板里走 confirm 流程。
+2. **宿主调用回主线程**。HTTP 在自己线程里跑，`cmds` 只能在主线程调，所以桥
+   通过适配器注册的 `executeInMainThreadWithResult` 切回去；主线程被占住时
+   硬超时 15s 回 503，不会把请求挂死。
+3. **mayabatch 里调不通**。batch 没有事件循环，idle 队列不推进，请求必然超时 ——
+   这不是 bug。验证桥要用 `maya.exe`。
+
+## 8.2 对话侧连哪个 AI（出站）
+
+入站是"外部调我"，出站是"我去调外部模型"。出站走任何 **OpenAI 兼容端点**：
+
+- 面板：对话控制台 → 「AI 连接」，填 `base_url` / 模型 / 密钥**环境变量名**，点「测试连接」；
+- 配置：`~/.tak/config.json` 的 `ai.base_url` / `ai.model` / `ai.api_key_env`；
+- 环境变量：`TAK_AI_BASE_URL` / `TAK_AI_API_KEY`（优先级最高，CI 用这个）。
+
+密钥**不写进配置文件**，配置里只存变量名 —— 把 config.json 发给同事不会泄露凭据。
+离线默认值跟着钥匙走：没密钥就离线（走确定性 mock），有密钥就真连。
 
 ## 9. 文档的维护约定
 
@@ -125,3 +168,5 @@ Web 面板**不是**第二个工具入口。它的实际场景只有两个：
 3. 文档里出现的 `rule_id` 必须在源码里真实存在，文档标注的版本不能高于 `tak/version.py`。
 
 新增插件时先跑 `python tools/new_tool.py <id>`，它会生成 manifest 骨架；补完 `category` / `summary` / `features` / `usage` 后，面板详情区就能直接读到。
+
+第三方脚本不必按这个骨架来：设置面板 →「导入工具」可以直接选 `.py` 装进来，导入器会用 `ast` 只用不跑地读出功能、权限和入口，再生成一份可编辑的 manifest（`tak/core/importer.py`）。

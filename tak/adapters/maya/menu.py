@@ -137,9 +137,31 @@ def register_menu(menu_name: str = MENU_NAME,
             if item is not None and item is not False:
                 created += 1
         return {"ok": True, "menu": menu_name, "label": label,
-                "items": created}
+                "items": created, "bridge": _autostart_bridge()}
     except Exception as exc:
         return _unavailable("%s: %s" % (type(exc).__name__, exc))
+
+
+def _autostart_bridge() -> Dict[str, Any]:
+    """按 ``bridge.autostart`` 决定要不要顺带把本地桥拉起来。
+
+    为什么放在菜单注册里而不是单独加一个菜单项：菜单只保留「打开面板 /
+    设置 / 关于」三项（用户明确要求），桥的开关属于面板里的设置。这里只做
+    「用户选了开机自启就自启」，失败绝不影响菜单本身 —— 桥起不来顶多是外部
+    调不进来，面板照常用。
+    """
+    try:
+        from tak.core import bridge as tak_bridge
+        data = tak_bridge.tak_config.load()
+        if not bool((data.get("bridge") or {}).get("autostart")):
+            return {"ok": True, "started": False, "reason": "未开启自启"}
+        payload = tak_bridge.start_bridge(dcc="maya")
+        return {"ok": bool(payload.get("ok")), "started": bool(payload.get("ok")),
+                "url": payload.get("url", ""), "port": payload.get("port", 0),
+                "error": payload.get("error", "")}
+    except Exception as exc:
+        return {"ok": False, "started": False,
+                "error": "%s: %s" % (type(exc).__name__, exc)}
 
 
 def unregister_menu(menu_name: str = MENU_NAME) -> Dict[str, Any]:

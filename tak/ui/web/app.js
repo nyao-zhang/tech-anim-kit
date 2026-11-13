@@ -460,45 +460,6 @@
             if (snap) { payload.snapshot = snap; }
             aiPost("/api/vision", payload, "visionOutput", "抽帧诊断");
         });
-
-        $("mappingRunBtn").addEventListener("click", function () {
-            var data = parseJsonInput("mappingInput", "骨骼列表", "mappingOutput");
-            if (data === undefined) { return; }
-            data = data || {};
-            aiPost("/api/mapping", {
-                source_bones: data.source_bones || [],
-                target_bones: data.target_bones || [],
-                options: data.options || {}
-            }, "mappingOutput", "骨骼映射");
-        });
-
-        $("motionRunBtn").addEventListener("click", function () {
-            motionSearch(false);
-        });
-        $("motionAllBtn").addEventListener("click", function () {
-            $("motionInput").value = "";
-            motionSearch(true);
-        });
-    }
-
-    // 动作检索：把 UI 上的筛选项收敛成 options.filters，服务端只做纯函数检索。
-    function motionSearch(listAll) {
-        var query = listAll ? "" : $("motionInput").value.trim();
-        var filters = {};
-        var minDur = parseFloat($("motionMinDur").value);
-        var maxDur = parseFloat($("motionMaxDur").value);
-        if (!isNaN(minDur) && minDur > 0) { filters.min_duration = minDur; }
-        if (!isNaN(maxDur) && maxDur > 0) { filters.max_duration = maxDur; }
-        if ($("motionLoopable").checked) { filters.loopable = true; }
-        if ($("motionRootMotion").checked) { filters.root_motion = true; }
-        var options = { filters: filters };
-        var type = $("motionType").value;
-        if (type) { options.motion_type = type; }
-        aiPost("/api/motion", {
-            query: query,
-            top_k: 8,
-            options: options
-        }, "motionOutput", "动作检索");
     }
 
     // --------------------------------------------------------------- 启动
@@ -544,8 +505,8 @@
         });
     }
 
-    // 支持 ?tab=motion|kb|vision|mapping 深链：DCC 菜单项可以直接把用户送到
-    // 某个页签（tak.adapters.*.menu 生成地址时会带上它）。
+    // 支持 ?tab=chat|kb|vision 深链：外部页面或文档可以直接把用户送到某个页签。
+    // 只允许这三个值 —— 未知页签由 querySelector 自然落空，不会报错。
     function activateTab(name) {
         if (!name) { return; }
         var target = document.querySelector('.tak-ai-tab[data-tab="' + name + '"]');

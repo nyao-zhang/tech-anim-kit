@@ -29,6 +29,14 @@ _MAX_MESHES = 64
 _MAX_PARENT_DEPTH = 128
 _WEIGHT_EPSILON = 1e-5
 
+# 场景卫生采集的两道上限：health 是「顺手体检」，不能因为它把场景遍历成瓶颈。
+_MAX_HEALTH_SCAN = 4000
+_MAX_CONTROL_COLORS = 80
+
+# 控制器命名约定。只认明确像控制器的名字，避免把面部形态曲线、参考线、
+# 模型上的曲线边全当控制器报「未上色」。
+_CONTROL_HINTS = ("ctrl", "ctl", "control", "gui")
+
 # 规范里允许的常见变形器类型；skinCluster 由独立的簇查询补齐。
 _DEFORMER_TYPES = frozenset({
     "skinCluster", "blendShape", "cluster", "wrap", "nonLinear",
@@ -138,6 +146,16 @@ def _unique(items: Sequence[str]) -> List[str]:
             seen.add(item)
             result.append(item)
     return result
+
+
+def _looks_like_control(name: str) -> bool:
+    """按命名约定判断一个 transform 是否像控制器。
+
+    只做「是/否」二值判断，不参与任何判定结论 —— 判错的代价只是少报或多报一条
+    INFO 级建议，不会影响 ERROR/BLOCKER。
+    """
+    lowered = _short_name(name).lower()
+    return any(hint in lowered for hint in _CONTROL_HINTS)
 
 
 # --------------------------------------------------------------------------- #
@@ -657,6 +675,15 @@ class MayaAdapter(DCCAdapter):
                 "generated_by": "tak",
             },
         }
+        # 场景卫生 9 条规则只认 metadata["health"]。过去这里不采集，规则读不到
+        # 数据就整组静默退出，面板上显示「通过」—— 这是最坏的一种假通过。
+        # 采集失败时**不写该键**（而不是写空字典）：空字典表示「查过了，没问题」，
+        # 两者必须区分开，否则又回到假通过。
+        try:
+            snapshot["metadata"]["health"] = self._collect_health(cmds, joints)
+        except Exception as exc:
+            snapshot["metadata"]["health_error"] = "%s: %s" % (
+                type(exc).__name__, exc)
         return _filter_root(snapshot, root)
 
     def _world_matrix(self, cmds: Any, node: str) -> List[float]:
@@ -698,6 +725,211 @@ class MayaAdapter(DCCAdapter):
         if per_mesh:
             result["per_mesh"] = per_mesh
         return result
+
+    # ------------------------------------------------------- 场景卫生采集
+    def _collect_health(self, cmds: Any, joint_names: Sequence[str]) -> Dict[str, Any]:
+        """采集 ``metadata.health``：场景卫生 9 条规则唯一的数据源。
+
+        三条硬约束（违背任何一条都会退化成「假通过」或「满屏误报」）：
+
+        1. **只采能确定的量**。采不到的键**不写**，规则看到缺键会退回从快照
+           推断（``unfrozen_transform`` / ``negative_scale`` 都有快照兜底），
+           绝不会因为「键不存在」被当成「检查通过」。
+        2. **宁可漏报不可误报**。每类采集都用最窄的判据，例如孤立节点必须是
+           「无父级 + 无子级 + 除 message 外无任何连接 + 未被引用」的纯垃圾节点，
+           这样根骨、控制器组、引用进来的资产都不会被误判。
+        3. **单类失败不影响整体**。任何一类抛异常都只把原因记进 ``_meta.errors``，
+           其余类别照常返回，UI 上表现为「这一类没查」而不是「体检炸了」。
+
+        返回的字典只包含**已经查过**的键，另带 ``_meta`` 说明覆盖情况。
+        """
+        health: Dict[str, Any] = {}
+        collected: List[str] = []
+        errors: Dict[str, str] = {}
+        joints = {str(name) for name in joint_names if name}
+
+        def _run(key: str, func: Any) -> None:
+            try:
+                value = func()
+            except Exception as exc:  # 单类失败不拖垮整体
+                errors[key] = "%s: %s" % (type(exc).__name__, exc)
+                return
+            if value is not None:
+                health[key] = value
+                collected.append(key)
+
+        transforms = [str(item) for item in
+                      (_get(cmds, "ls", [], type="transform", long=False) or [])
+                      if item]
+
+        _run("orphan_nodes",
+             lambda: self._health_orphans(cmds, transforms, joints))
+        _run("negative_scale",
+             lambda: self._health_negative_scale(cmds, transforms, joints))
+        _run("duplicate_shapes", lambda: self._health_duplicate_shapes(cmds))
+        _run("references", lambda: self._health_references(cmds))
+        _run("control_colors",
+             lambda: self._health_control_colors(cmds, joints))
+
+        health["_meta"] = {
+            "collected": sorted(collected),
+            # 显式声明「本适配器不提供」的键，附理由，避免读的人以为是漏了。
+            "not_provided": {
+                "unfrozen_transforms": "该键一旦存在，规则会跳过 joints 推断；"
+                                       "关节的未冻结变换由规则自身从快照读取",
+                "max_influences": "影响骨上限来自规范而不是场景，由规则回落到 spec",
+            },
+            "errors": dict(errors),
+            "source": "tak.adapters.maya",
+        }
+        return health
+
+    def _health_orphans(self, cmds: Any, transforms: Sequence[str],
+                        joints: Any) -> List[str]:
+        """孤立节点：无父级、无子级、无任何连接、未被引用、变换仍是默认值。
+
+        判据刻意取最窄的一档 —— 只抓真正的垃圾节点（历史遗留的 ``group1``、
+        改名后剩下的空 transform）。有子级说明它承载着层级，有连接说明有依赖，
+        被引用说明资产来自 reference，动过变换说明有人摆过位置，这五种都不算孤立。
+
+        真机踩过的坑：不加「变换是默认值」这条，一个 ``scaleX=-1`` 的镜像组会
+        同时被报成「孤立节点」和「负缩放」—— 同一处问题两条结论，用户在面板上
+        没法判断该先修哪个。
+        """
+        orphans: List[str] = []
+        for node in transforms[:_MAX_HEALTH_SCAN]:
+            if node in joints:
+                continue
+            if _get(cmds, "listRelatives", [], node, parent=True):
+                continue
+            if _get(cmds, "listRelatives", [], node, children=True):
+                continue
+            if _get(cmds, "listConnections", [], node,
+                    source=True, destination=True):
+                continue
+            if _get(cmds, "referenceQuery", False, node, isNodeReferenced=True):
+                continue
+            if not self._has_default_transform(cmds, node):
+                continue
+            orphans.append(node)
+        return orphans
+
+    def _has_default_transform(self, cmds: Any, node: str) -> bool:
+        """translate / rotate / scale 是否都还是默认值（读不到就当「不是」）。"""
+        expected = ((".translate", (0.0, 0.0, 0.0)),
+                    (".rotate", (0.0, 0.0, 0.0)),
+                    (".scale", (1.0, 1.0, 1.0)))
+        for suffix, default in expected:
+            value = _get(cmds, "getAttr", None, "%s%s" % (node, suffix))
+            if isinstance(value, (list, tuple)) and len(value) == 1 \
+                    and isinstance(value[0], (list, tuple)):
+                value = value[0]
+            if not isinstance(value, (list, tuple)) or len(value) != 3:
+                return False
+            try:
+                numbers = [float(item) for item in value]
+            except (TypeError, ValueError):
+                return False
+            if any(abs(a - b) > _WEIGHT_EPSILON for a, b in zip(numbers, default)):
+                return False
+        return True
+
+    def _health_negative_scale(self, cmds: Any, transforms: Sequence[str],
+                               joints: Any) -> List[str]:
+        """负缩放的非关节节点（关节的负缩放规则会自己从快照里读）。
+
+        只上报**最上层**：父级已经负缩放时跳过，否则镜像层级会被整条链重复报一遍。
+        """
+        found: List[str] = []
+        for node in transforms[:_MAX_HEALTH_SCAN]:
+            if node in joints:
+                continue
+            values = self._scale_of(cmds, node)
+            if values is None:
+                continue
+            if not any(value < -_WEIGHT_EPSILON for value in values):
+                continue
+            parent = _get(cmds, "listRelatives", [], node, parent=True)
+            if parent:
+                inherited = self._scale_of(cmds, str(parent[0])) or (1.0, 1.0, 1.0)
+                if any(value < -_WEIGHT_EPSILON for value in inherited):
+                    continue
+            found.append(node)
+        return found
+
+    def _scale_of(self, cmds: Any, node: str) -> Optional[List[float]]:
+        """读节点本地缩放；读不到返回 None（调用方据此跳过，而不是当 1.0）。"""
+        value = _get(cmds, "getAttr", None, "%s.scale" % node)
+        if isinstance(value, (list, tuple)) and len(value) == 1 \
+                and isinstance(value[0], (list, tuple)):
+            value = value[0]
+        if not isinstance(value, (list, tuple)) or len(value) != 3:
+            return None
+        try:
+            return [float(item) for item in value]
+        except (TypeError, ValueError):
+            return None
+
+    def _health_duplicate_shapes(self, cmds: Any) -> List[Dict[str, Any]]:
+        """被多个 transform 共享的 shape（实例化）。替换模型时会互相串改。"""
+        shapes = list(_get(cmds, "ls", [], type="mesh", noIntermediate=True) or [])
+        shapes += list(_get(cmds, "ls", [], type="nurbsCurve",
+                            noIntermediate=True) or [])
+        entries: List[Dict[str, Any]] = []
+        for shape in shapes[:_MAX_HEALTH_SCAN]:
+            parents = [str(item) for item in
+                       (_get(cmds, "listRelatives", [], shape, parent=True) or [])
+                       if item]
+            if len(parents) > 1:
+                entries.append({"shape": _short_name(shape), "nodes": parents})
+        return entries
+
+    def _health_references(self, cmds: Any) -> List[Dict[str, Any]]:
+        """可疑的 reference：文件已不在磁盘上，或已卸载但节点仍留在场景里。
+
+        正常在用、文件完好的 reference 不上报 —— 绑定场景里引用道具是常规做法。
+        """
+        nodes = [str(item) for item in (_get(cmds, "ls", [], type="reference") or [])
+                 if item and str(item) != "sharedReferenceNode"]
+        entries: List[Dict[str, Any]] = []
+        for node in nodes:
+            path = str(_get(cmds, "referenceQuery", "", node, filename=True) or "")
+            loaded = bool(_get(cmds, "referenceQuery", False, node, isLoaded=True))
+            if not path:
+                continue
+            missing = not os.path.isfile(path)
+            if not missing and loaded:
+                continue
+            entries.append({"node": node, "file": path,
+                            "loaded": loaded, "missing": missing})
+        return entries
+
+    def _health_control_colors(self, cmds: Any, joints: Any) -> Dict[str, Any]:
+        """按命名约定识别控制器并读取 override color。
+
+        不把场景里每一条曲线都当控制器（那会把面部形态、参考线全算进来刷屏），
+        只认名字里带 ctrl / ctl / control / gui 的 transform；数量到上限即停，
+        避免大场景产出上百条 INFO。
+        """
+        curves = _get(cmds, "ls", [], type="nurbsCurve", noIntermediate=True) or []
+        colors: Dict[str, Any] = {}
+        for shape in curves:
+            parents = _get(cmds, "listRelatives", [], shape, parent=True) or []
+            if not parents:
+                continue
+            parent = str(parents[0])
+            if parent in joints or parent in colors:
+                continue
+            if not _looks_like_control(parent):
+                continue
+            if len(colors) >= _MAX_CONTROL_COLORS:
+                break
+            enabled = bool(_get(cmds, "getAttr", False,
+                               "%s.overrideEnabled" % parent))
+            # overrideEnabled 为 False 时写 None：规则只认明确的空值为「未上色」。
+            colors[parent] = None if not enabled else _as_int(
+                _get(cmds, "getAttr", 0, "%s.overrideColor" % parent), 0)
+        return colors
 
     def _load_fbx_plugin(self, cmds: Any) -> None:
         _get(cmds, "loadPlugin", None, "fbxmaya", quiet=True)

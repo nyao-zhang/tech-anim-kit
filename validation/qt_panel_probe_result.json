@@ -1,4 +1,20 @@
 {
+  "ai_connection": {
+    "api_key_env": "TAK_AI_API_KEY",
+    "base_url_source": "default",
+    "hint": "缺少密钥：请设置环境变量 TAK_AI_API_KEY（配置里只存变量名，不存密钥）",
+    "ready": false
+  },
+  "bridge_status": {
+    "endpoints": [
+      "GET  /bridge/health",
+      "GET  /bridge/tools",
+      "GET  /bridge/scene[?full=1]",
+      "POST /bridge/run     {tool_id, options?}",
+      "POST /bridge/chat    {message, session_id?}"
+    ],
+    "running": false
+  },
   "categories": [
     "全部 · 5",
     "通用 · 2",
@@ -6,6 +22,16 @@
     "动画 · 2",
     "管线 · 1",
     "AI · 3"
+  ],
+  "console_capabilities": [
+    "intent.classify",
+    "rules.explain",
+    "candidates.local",
+    "dsl.plan",
+    "dsl.preview",
+    "dsl.confirm",
+    "knowledge.search",
+    "report.render"
   ],
   "details": [
     {
@@ -67,6 +93,30 @@
   ],
   "empty_state_ok": true,
   "has_qt": true,
+  "import_widgets": {
+    "ai_checkbox": true,
+    "path": true,
+    "report": true,
+    "table": true
+  },
+  "importer": {
+    "dcc": [
+      "maya"
+    ],
+    "discovered": true,
+    "finding_ids": [
+      "imported.no_contract"
+    ],
+    "has_report_contract": false,
+    "ok": true,
+    "permissions": [
+      "scene.read"
+    ],
+    "run_passed": false,
+    "stdout_tail": "joints 0\n",
+    "tool_id": "probe_joint_counter",
+    "uninstalled": true
+  },
   "mode": "gui",
   "ok": true,
   "python": "3.11.9",
@@ -75,10 +125,16 @@
   "settings_categories": 5,
   "settings_created": true,
   "settings_rows": 8,
+  "settings_tabs": [
+    "分类",
+    "工具归类",
+    "导入工具",
+    "常规"
+  ],
   "tool_ui_modules": {
     "agent_console": "show",
     "asset_pipeline": "show",
-    "defect_inspector": "missing ui_qt.py",
+    "defect_inspector": "show",
     "mldeformer_factory": "show",
     "qa_inspector": "show"
   },
@@ -97,6 +153,6 @@
     "绑定 · 3": 3,
     "通用 · 2": 2
   },
-  "version": "0.4.0",
+  "version": "0.5.0",
   "window_created": true
 }

@@ -123,7 +123,39 @@ def main():
         state["settings_created"] = True
         state["settings_rows"] = dialog.tool_table.rowCount()
         state["settings_categories"] = dialog.category_list.count()
+        # v0.5.0：设置里多了「导入工具」页，四个页签的顺序也要对得上
+        state["settings_tabs"] = [dialog.tabs.tabText(i)
+                                  for i in range(dialog.tabs.count())]
+        state["import_widgets"] = {
+            "path": hasattr(dialog, "import_path"),
+            "table": hasattr(dialog, "import_list"),
+            "report": hasattr(dialog, "import_report"),
+            "ai_checkbox": hasattr(dialog, "import_ai"),
+        }
         dialog.deleteLater()
+
+        # 对话控制台的「连接」行：桥接与 AI 两条通道各自可开
+        from tools.agent_console import ui_qt as console_ui
+        core = console_ui._plugin_core()
+        state["console_capabilities"] = core.info().get("capabilities")
+
+        # 桥接状态与 AI 连接描述都必须可读（哪怕没配密钥也要给原因）
+        from tak.core import bridge as tak_bridge
+        from tak.core.ai import connection
+        state["bridge_status"] = {
+            "running": tak_bridge.bridge_status().get("running"),
+            "endpoints": list(tak_bridge.ENDPOINTS),
+        }
+        describe = connection.describe()
+        state["ai_connection"] = {
+            "ready": describe.get("ready"),
+            "base_url_source": describe.get("base_url_source"),
+            "api_key_env": describe.get("api_key_env"),
+            "hint": describe.get("hint"),
+        }
+
+        # 导入器端到端：造一个真脚本 → 安装 → 出现在工具列表 → 运行 → 卸载
+        state["importer"] = _probe_importer()
 
         window.deleteLater()
         state["ok"] = True
@@ -131,6 +163,65 @@ def main():
         state["reason"] = "%s: %s" % (type(exc).__name__, exc)
         state["traceback"] = traceback.format_exc()
     return state
+
+
+def _probe_importer():
+    """在真 Maya 里验证导入器：导入的脚本能用 cmds，且运行结果如实回报。"""
+    import tempfile
+    from tak.core import importer, runner
+
+    # 逐行拼装：转义写坏过一次，逐行最稳
+    lines = [
+        "# -*- coding: utf-8 -*-",
+        '"""临时探针脚本：统计场景里的关节数量。',
+        "",
+        "- 列出全部关节",
+        "- 报告数量",
+        '"""',
+        "import maya.cmds as cmds",
+        "",
+        "",
+        "def count_joints():",
+        '    """返回场景中的关节数量。"""',
+        '    return len(cmds.ls(type="joint") or [])',
+        "",
+        "",
+        "def main():",
+        '    print("joints", count_joints())',
+        "",
+    ]
+    temp_dir = tempfile.mkdtemp(prefix="tak_probe_")
+    path = os.path.join(temp_dir, "probe_joint_counter.py")
+    with io.open(path, "w", encoding="utf-8") as handle:
+        handle.write(chr(10).join(lines))
+    try:
+        analysis = importer.analyze(path)
+        draft = importer.draft_manifest(analysis)
+        result = importer.install(path, manifest=draft, analysis=analysis,
+                                  overwrite=True)
+        if not result.get("ok"):
+            return {"ok": False, "stage": "install", "error": result.get("error")}
+        tool_id = result["tool_id"]
+        discovered = tool_id in {item["id"] for item in runner.list_tools(dcc="maya")}
+        run = runner.run_tool(tool_id, None, dcc="maya")
+        payload = {
+            "ok": True,
+            "tool_id": tool_id,
+            "discovered": discovered,
+            "permissions": draft.get("permissions"),
+            "dcc": draft.get("dcc"),
+            "has_report_contract": analysis.get("has_report_contract"),
+            "run_passed": run.report.passed,
+            "finding_ids": [item.rule_id for item in run.report.findings],
+            "stdout_tail": str(run.report.metadata.get("stdout") or "")[-120:],
+        }
+        importer.uninstall(tool_id)
+        payload["uninstalled"] = not importer.is_imported(tool_id)
+        return payload
+    except Exception as exc:
+        return {"ok": False, "stage": "exception",
+                "error": "%s: %s" % (type(exc).__name__, exc),
+                "traceback": traceback.format_exc()[-800:]}
 
 
 try:

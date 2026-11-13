@@ -105,12 +105,26 @@ def get_provider(model: Optional[str] = None, offline: Optional[bool] = None,
     默认离线。TAK_AI_OFFLINE=0 且存在 TAK_AI_API_KEY 时才创建真实 provider；
     缺少密钥或显式离线均自动回退 mock，不因缺配置抛异常。
     """
+    # 连接参数统一走 connection.resolve_settings()：环境变量 > ~/.tak/config.json
+    # > 默认值。此前只读环境变量，用户在面板里填了 base_url 也不生效 —— 那正是
+    # 「对话控制台连不上 WorkBuddy」的根因。
+    from .connection import resolve_settings
+
+    settings = resolve_settings()
+    # 离线默认值改为「跟着钥匙走」：有密钥就可连，没密钥就离线。
+    # 早先的默认是「一律离线，除非显式设 TAK_AI_OFFLINE=0」，结果是用户在面板里
+    # 配好地址和密钥后仍然连不上，还得再去找一个没写在界面上的环境变量。
+    # 显式设置 TAK_AI_OFFLINE 仍然优先（CI 里固定无网跑要靠它）。
+    env_offline = os.environ.get("TAK_AI_OFFLINE", "").strip().lower()
     if offline is None:
-        offline = os.environ.get("TAK_AI_OFFLINE", "1").strip().lower() != "0"
-    if offline or not os.environ.get("TAK_AI_API_KEY", "").strip():
+        offline = (env_offline != "0") if env_offline else not settings["api_key_present"]
+    if offline or not settings["api_key_present"]:
         return MockProvider(budget=budget)
-    selected_model = model or provider_for_task(task)
+    selected_model = model or settings["model"] or provider_for_task(task)
     return HTTPProvider(
         model=selected_model, budget=budget, timeout=timeout,
         max_retries=max_retries, retry_backoff=retry_backoff,
+        base_url=settings["base_url"],
+        api_key=(os.environ.get(settings["api_key_env"], "").strip()
+                 or os.environ.get("TAK_AI_API_KEY", "").strip()),
     )

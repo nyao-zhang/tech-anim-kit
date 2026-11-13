@@ -2,9 +2,11 @@
 
 跨 DCC 技术动画工具集，面向 **Maya 2023+ / 3ds Max 2023+ / MotionBuilder 2023+ / Unreal Engine 5.8–5.9**。
 
-> 当前版本 `0.4.0`（**P7 信息架构重构**）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
+> 当前版本 `0.5.0`（**外部接入**：本地桥 + AI 端点 + 第三方工具导入）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
 >
-> v0.4.0 的变化集中在**面板**：工具从 11 个精简为 5 个并按分类组织，每个工具有自己的界面，选中后右侧显示作用 / 功能 / 用法，菜单只留「打开面板 / 设置 / 关于」。详见 [变更日志](CHANGELOG.md) 第 0.4.0 节。
+> v0.5.0 打通两条通道：**外部能调 DCC**（`127.0.0.1` 本地桥，token 鉴权，只读为主），**DCC 能连 AI**（任何 OpenAI 兼容端点，密钥只存环境变量名），并支持**导入第三方 .py 工具**（ast 只读分析 → 生成 manifest → 装进面板）。场景卫生 9 条规则也第一次在真 Maya 里有数据。详见 [变更日志](CHANGELOG.md) 第 0.5.0 节。
+>
+> v0.4.0 的变化集中在**面板**：工具从 11 个精简为 5 个并按分类组织，每个工具有自己的界面，选中后右侧显示作用 / 功能 / 用法，菜单只留「打开面板 / 设置 / 关于」。
 
 ## 设计原则
 
@@ -58,6 +60,26 @@ print(result.passed, result.render("md"))
 python -c "from tak.ui.qt import launch; launch('maya')"   # Maya / Max / MoBu 内
 python -c "from tak.ui.qt import open_settings; open_settings('maya')"
 python -m tak.ui.web.server --port 8765       # 只读报告看板（跨人分享 / 离线回看）
+```
+
+让外部（WorkBuddy / 脚本）调 DCC，以及导入别人的脚本：
+
+```bash
+# 在 DCC 里开桥（面板里：对话控制台 → 桥接设置）
+python -c "from tak.core.bridge import start_bridge; print(start_bridge('maya')['url'])"
+python -m tak.core.bridge status            # 桥开没开、地址、可用端点
+python -m tak.core.bridge scene             # 场景摘要
+python -m tak.core.bridge run qa_inspector   # 跑检查并拿结论
+
+# 导入一个第三方脚本（面板里：设置 → 导入工具）
+python -c "
+from tak.core import importer
+a = importer.analyze('path/to/tool.py')
+print(importer.install('path/to/tool.py', analysis=a)['tool_id'])"
+```
+
+桥只监听 `127.0.0.1`，除 `/bridge/health` 外都要带 `X-TAK-Token`（存在
+`~/.tak/config.json`，首次启动自动生成）。写场景不开放 —— confirm 只能在面板里人工点。
 ```
 
 真机验证（需本机安装引擎）：

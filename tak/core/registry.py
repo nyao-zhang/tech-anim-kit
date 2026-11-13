@@ -4,6 +4,10 @@
 约定：每个工具是 tools/<id>/ 下的一个目录，含 manifest.json。
 外部插件目录通过环境变量 TAK_PLUGIN_PATH（os.pathsep 分隔）追加，
 新增工具无需修改框架任何代码。
+
+用户导入的第三方工具落在 ``~/.tak/plugins/<id>/``（见 tak.core.importer），
+这个目录**默认就在搜索路径里**：否则用户导入完还得去设一个环境变量才能看到，
+那等于没导入。
 """
 from __future__ import annotations
 
@@ -143,15 +147,31 @@ def load_manifest(path: str) -> Plugin:
     )
 
 
+def user_plugin_dir() -> str:
+    """用户级插件目录（导入的第三方工具放在这里，跨项目可用）。"""
+    try:
+        from tak.core import config as tak_config
+        return os.path.join(tak_config.config_home(), "plugins")
+    except Exception:
+        return os.path.join(os.path.expanduser("~"), ".tak", "plugins")
+
+
 def plugin_dirs(tools_dir: Optional[str] = None,
-                extra_dirs: Optional[List[str]] = None) -> List[str]:
-    """收集候选插件目录；以下划线开头的目录（如 _template）跳过。"""
+                extra_dirs: Optional[List[str]] = None,
+                include_user: bool = True) -> List[str]:
+    """收集候选插件目录；以下划线开头的目录（如 _template）跳过。
+
+    ``include_user=False`` 只扫仓库内 ``tools/``，供测试与「只看内置工具」的
+    场景使用 —— 用户导入的插件不该混进内置插件计数里。
+    """
     roots = [tools_dir or DEFAULT_TOOLS_DIR]
     env = os.environ.get("TAK_PLUGIN_PATH", "")
     if env:
         roots.extend(p for p in env.split(os.pathsep) if p)
     if extra_dirs:
         roots.extend(extra_dirs)
+    if include_user:
+        roots.append(user_plugin_dir())
     found: List[str] = []
     for root in roots:
         if not os.path.isdir(root):
@@ -167,10 +187,11 @@ def plugin_dirs(tools_dir: Optional[str] = None,
 
 def discover(tools_dir: Optional[str] = None,
              extra_dirs: Optional[List[str]] = None,
-             dcc: Optional[str] = None) -> List[Plugin]:
+             dcc: Optional[str] = None,
+             include_user: bool = True) -> List[Plugin]:
     """发现全部合法插件；单个坏 manifest 不阻断其余插件。"""
     plugins: List[Plugin] = []
-    for sub in plugin_dirs(tools_dir, extra_dirs):
+    for sub in plugin_dirs(tools_dir, extra_dirs, include_user):
         try:
             plugin = load_manifest(os.path.join(sub, MANIFEST_NAME))
         except (ManifestError, OSError, ValueError):

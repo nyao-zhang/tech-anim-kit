@@ -114,6 +114,22 @@ def run_report(context: Any) -> Any:
                      "tak.core.runner.evaluate() 走内置规范规则。",
             data={"health_section": health_state, "scope": report.metadata["scope"]},
         ))
+    elif health_state["errors"]:
+        # 采集器给了 health，但其中几类没采到。这一类规则同样会安静返回 0 条，
+        # 所以在结果里点名，避免「看起来通过」。
+        from tak.core.rules.base import Finding, Severity
+
+        report.findings.append(Finding(
+            rule_id=TOOL_ID + ".datasource.partial",
+            severity=Severity.INFO,
+            message="场景卫生有 %d 类数据未采集到，相关检查本次未执行：%s"
+                    % (len(health_state["errors"]),
+                       "、".join(sorted(health_state["errors"]))),
+            fix_hint="查看 metadata.health._meta.errors 里的具体报错；"
+                     "大场景可先缩小范围再体检。",
+            data={"health_section": health_state,
+                  "scope": report.metadata["scope"]},
+        ))
     findings = list(report.findings)
 
     explanations, ai_meta = _build_explanations(findings)
@@ -254,8 +270,17 @@ def _health_state(snapshot: Any) -> Dict[str, Any]:
     metadata = data.get("metadata")
     health = metadata.get("health") if isinstance(metadata, dict) else None
     present = isinstance(health, dict)
+    keys = sorted(str(key) for key in health if not str(key).startswith("_")) \
+        if present else []
+    meta = health.get("_meta") if present else None
+    coverage = dict(meta) if isinstance(meta, dict) else {}
     return {
         "present": present,
-        "keys": sorted(str(key) for key in health) if present else [],
+        # 下划线开头的键是采集器自己的元信息（覆盖情况 / 错误），不是规则数据，
+        # 列进来会让人误以为多了一条可用字段。
+        "keys": keys,
+        "coverage": coverage,
+        "not_provided": dict(coverage.get("not_provided") or {}),
+        "errors": dict(coverage.get("errors") or {}),
         "note": "" if present else "快照未提供 metadata.health，插件规则整组跳过。",
     }

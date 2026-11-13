@@ -5,7 +5,9 @@
 
 1. **改分类** —— 增 / 删 / 改名，内置的「通用 / 绑定 / 动画 / 管线 / AI」只是初值；
 2. **改归类** —— 每个工具属于哪些分类，直接写文本（分类名或 id 都认，逗号分隔）；
-3. **改默认** —— 主题、隐藏工具、配置目录。
+3. **改默认** —— 主题、隐藏工具、配置目录；
+4. **导入工具** —— 把第三方 .py 脚本装进面板，可选让 AI 读脚本补全说明
+   （见 ``tak.core.importer``；导入只做 ast 只读分析，不执行脚本）。
 
 所有改动落 ``~/.tak/config.json``，由 ``tak.core.config`` 原子写回。
 插件目录里的 ``manifest.json`` 不被修改 —— 那是插件作者的事实源，用户的偏好
@@ -13,10 +15,12 @@
 """
 from __future__ import annotations
 
+import os
 import re
 from typing import Any, Dict, List, Optional
 
 from tak.core import config as tak_config
+from tak.core import importer, registry
 from tak.compat.qt import QtCore, QtWidgets
 
 from .components import _theme_path
@@ -84,6 +88,7 @@ class SettingsDialog(_DialogBase):
         self.tabs.setDocumentMode(True)
         self.tabs.addTab(self._build_category_tab(), "分类")
         self.tabs.addTab(self._build_tool_tab(), "工具归类")
+        self.tabs.addTab(self._build_import_tab(), "导入工具")
         self.tabs.addTab(self._build_general_tab(), "常规")
         outer.addWidget(self.tabs, 1)
 
@@ -196,7 +201,237 @@ class SettingsDialog(_DialogBase):
         layout.addStretch(1)
         return page
 
-    # ------------------------------------------------------------ 数据
+    # ------------------------------------------------------------ 导入工具
+    def _build_import_tab(self) -> Any:
+        """导入第三方脚本：选文件 → 看分析结果 → 可改说明 → 装进面板。
+
+        这一页刻意把「TAK 不会替你执行脚本」写在最上面：导入只做 ast 解析与
+        文件复制，脚本真正的运行发生在用户点「快速运行」或「打开工具界面」时。
+        """
+        page = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(page)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        intro = QtWidgets.QLabel(
+            "导入 .py 脚本或包含 .py 的目录。导入时只读分析（ast），不会执行脚本；"
+            "安装位置 %s，跨项目可用。" % registry.user_plugin_dir())
+        intro.setProperty("takHint", "true")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        pick_row = QtWidgets.QHBoxLayout()
+        self.import_path = QtWidgets.QLineEdit()
+        self.import_path.setPlaceholderText("脚本路径（.py）或目录")
+        browse_file = QtWidgets.QPushButton("选脚本")
+        browse_dir = QtWidgets.QPushButton("选目录")
+        analyse_button = QtWidgets.QPushButton("分析")
+        analyse_button.setProperty("takPrimary", "true")
+        pick_row.addWidget(self.import_path, 1)
+        pick_row.addWidget(browse_file, 0)
+        pick_row.addWidget(browse_dir, 0)
+        pick_row.addWidget(analyse_button, 0)
+        layout.addLayout(pick_row)
+
+        form = QtWidgets.QFormLayout()
+        self.import_id = QtWidgets.QLineEdit()
+        self.import_name = QtWidgets.QLineEdit()
+        self.import_summary = QtWidgets.QLineEdit()
+        self.import_category = QtWidgets.QLineEdit()
+        self.import_category.setPlaceholderText("general, rigging（逗号分隔）")
+        form.addRow("工具 id", self.import_id)
+        form.addRow("显示名", self.import_name)
+        form.addRow("一句话说明", self.import_summary)
+        form.addRow("分类", self.import_category)
+        layout.addLayout(form)
+
+        self.import_report = QtWidgets.QPlainTextEdit()
+        self.import_report.setReadOnly(True)
+        self.import_report.setMinimumHeight(150)
+        self.import_report.setPlainText(
+            "选好脚本后点「分析」，这里会显示：识别到的宿主、会改场景的函数、"
+            "有没有自己的界面、有没有 TAK 运行契约。")
+        layout.addWidget(self.import_report, 1)
+
+        action_row = QtWidgets.QHBoxLayout()
+        self.import_ai = QtWidgets.QCheckBox("用 AI 补全说明与用法")
+        self.import_ai.setChecked(True)
+        self.import_overwrite = QtWidgets.QCheckBox("覆盖同名工具")
+        install_button = QtWidgets.QPushButton("安装到面板")
+        install_button.setProperty("takPrimary", "true")
+        action_row.addWidget(self.import_ai, 0)
+        action_row.addWidget(self.import_overwrite, 0)
+        action_row.addStretch(1)
+        action_row.addWidget(install_button, 0)
+        layout.addLayout(action_row)
+
+        layout.addWidget(QtWidgets.QLabel("已导入的工具"))
+        self.import_list = QtWidgets.QTableWidget(0, 4)
+        self.import_list.setHorizontalHeaderLabels(["工具", "来源", "界面/契约", "导入时间"])
+        self.import_list.verticalHeader().setVisible(False)
+        self.import_list.setSelectionBehavior(
+            QtWidgets.QAbstractItemView.SelectRows)
+        self.import_list.setEditTriggers(
+            QtWidgets.QAbstractItemView.NoEditTriggers)
+        header = self.import_list.horizontalHeader()
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
+        layout.addWidget(self.import_list, 1)
+
+        list_row = QtWidgets.QHBoxLayout()
+        remove_button = QtWidgets.QPushButton("移除选中")
+        remove_button.setProperty("takGhost", "true")
+        refresh_button = QtWidgets.QPushButton("刷新列表")
+        refresh_button.setProperty("takGhost", "true")
+        list_row.addStretch(1)
+        list_row.addWidget(refresh_button, 0)
+        list_row.addWidget(remove_button, 0)
+        layout.addLayout(list_row)
+
+        self._import_state: Dict[str, Any] = {"analysis": {}, "manifest": {}}
+
+        def _browse(single_file: bool) -> None:
+            if single_file:
+                path, _ = QtWidgets.QFileDialog.getOpenFileName(
+                    page, "选择脚本", "", "Python 脚本 (*.py)")
+            else:
+                path = QtWidgets.QFileDialog.getExistingDirectory(
+                    page, "选择包含脚本的目录")
+            if path:
+                self.import_path.setText(path)
+                _analyse()
+
+        def _analyse() -> None:
+            source = self.import_path.text().strip()
+            if not source:
+                self.import_report.setPlainText("先选一个脚本或目录。")
+                return
+            analysis = importer.analyze(source)
+            self._import_state["analysis"] = analysis
+            if not analysis.get("ok"):
+                self.import_report.setPlainText(
+                    "分析失败：\n" + "\n".join(analysis.get("errors") or []))
+                self._import_state["manifest"] = {}
+                return
+            manifest = importer.draft_manifest(analysis)
+            self._import_state["manifest"] = manifest
+            self.import_id.setText(str(manifest.get("id") or ""))
+            self.import_name.setText(str(manifest.get("name") or ""))
+            self.import_summary.setText(str(manifest.get("summary") or ""))
+            self.import_category.setText(", ".join(manifest.get("category") or []))
+            self._render_import_report(analysis, manifest)
+
+        def _install() -> None:
+            analysis = self._import_state.get("analysis") or {}
+            manifest = dict(self._import_state.get("manifest") or {})
+            if not analysis.get("ok") or not manifest:
+                self.hint.setText("先点「分析」拿到可用信息，再安装。")
+                return
+            manifest["id"] = self.import_id.text().strip() or manifest.get("id")
+            manifest["name"] = self.import_name.text().strip() or manifest.get("name")
+            summary = self.import_summary.text().strip()
+            if summary:
+                manifest["summary"] = summary
+            categories = [item.strip() for item in
+                          self.import_category.text().replace("，", ",").split(",")
+                          if item.strip()]
+            if categories:
+                manifest["category"] = categories
+
+            ai_fields: List[str] = []
+            if self.import_ai.isChecked():
+                enriched = importer.enrich(manifest, analysis)
+                manifest = enriched.get("manifest") or manifest
+                ai_fields = list(enriched.get("fields") or [])
+                self.hint.setText(
+                    enriched.get("note") or "已跳过 AI 补全"
+                    if not enriched.get("ai")
+                    else "AI 已补全：%s" % "、".join(ai_fields))
+
+            result = importer.install(
+                self.import_path.text().strip(), manifest=manifest,
+                analysis=analysis, overwrite=self.import_overwrite.isChecked(),
+                ai_fields=ai_fields)
+            if result.get("ok"):
+                self.hint.setText(
+                    "已安装 %s 到 %s；保存后返回主面板即可看到。"
+                    % (result["tool_id"], result["dir"]))
+                self._load_imports()
+                self._notify_tools_changed()
+            else:
+                self.hint.setText("安装失败：%s" % result.get("error"))
+
+        def _remove() -> None:
+            row = self.import_list.currentRow()
+            item = self.import_list.item(row, 0) if row >= 0 else None
+            if item is None:
+                self.hint.setText("先在列表里选一个已导入的工具。")
+                return
+            tool_id = item.text()
+            result = importer.uninstall(tool_id)
+            self.hint.setText(
+                "已移除 %s" % tool_id if result.get("ok")
+                else "移除失败：%s" % result.get("error"))
+            self._load_imports()
+            self._notify_tools_changed()
+
+        browse_file.clicked.connect(lambda: _browse(True))
+        browse_dir.clicked.connect(lambda: _browse(False))
+        analyse_button.clicked.connect(_analyse)
+        install_button.clicked.connect(_install)
+        remove_button.clicked.connect(_remove)
+        refresh_button.clicked.connect(self._load_imports)
+        self._load_imports()
+        return page
+
+    def _render_import_report(self, analysis: Dict[str, Any],
+                              manifest: Dict[str, Any]) -> None:
+        lines = [
+            "宿主：%s" % "、".join(analysis.get("dcc") or []),
+            "入口：%s" % os.path.basename(str(analysis.get("entry") or "")),
+            "自带界面 show()：%s" % ("是" if analysis.get("has_show") else "否"),
+            "TAK 运行契约：%s" % ("有（可进结果表）"
+                                if analysis.get("has_report_contract")
+                                else "没有（只能原样执行，不会产判定）"),
+            "推断权限：%s" % "、".join(manifest.get("permissions") or []),
+            "会调用的宿主函数：%s" % ("、".join(
+                (analysis.get("host_calls") or [])[:12]) or "（未识别）"),
+            "",
+            "识别到的功能（来自 docstring / 函数注释）：",
+        ]
+        lines.extend("  · " + item for item in (manifest.get("features") or ["（无）"]))
+        if analysis.get("warnings"):
+            lines.append("")
+            lines.append("注意：")
+            lines.extend("  · " + item for item in analysis["warnings"])
+        if analysis.get("errors"):
+            lines.append("")
+            lines.append("解析错误：")
+            lines.extend("  · " + item for item in analysis["errors"])
+        self.import_report.setPlainText("\n".join(lines))
+
+    def _notify_tools_changed(self) -> None:
+        """导入/移除后通知主面板刷新；保存前也生效，不必等用户点保存。"""
+        if callable(self._on_saved):
+            try:
+                self._on_saved()
+            except Exception:
+                pass
+        self._load_tools()
+
+    def _load_imports(self) -> None:
+        items = importer.list_imported()
+        self.import_list.setRowCount(len(items))
+        for row, item in enumerate(items):
+            flags = []
+            flags.append("界面" if item.get("has_show") else "无界面")
+            flags.append("契约" if item.get("has_report_contract") else "无契约")
+            cells = [item.get("tool_id", ""), item.get("source", ""),
+                     " / ".join(flags), item.get("imported_at", "")]
+            for column, text in enumerate(cells):
+                self.import_list.setItem(row, column,
+                                         QtWidgets.QTableWidgetItem(str(text)))
+
     def _load_tools(self) -> None:
         from tak.core.runner import list_tools
         try:

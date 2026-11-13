@@ -67,7 +67,11 @@ def default_config() -> Dict[str, Any]:
         "export_profiles": {},
         "bridge": {"port": 0, "token": "", "autostart": False},
         "theme": "dark",
-        "ai": {"provider": "", "model": "", "vision_model": ""},
+        # AI 连接：base_url 指向任何 OpenAI 兼容端点（WorkBuddy 网关、
+        # 自建代理、官方 API 都行）。**密钥不写配置文件**，只记环境变量名，
+        # 避免 ~/.tak/config.json 变成明文凭据仓库。
+        "ai": {"provider": "", "model": "", "vision_model": "",
+               "base_url": "", "api_key_env": "TAK_AI_API_KEY"},
     }
 
 
@@ -165,8 +169,15 @@ def _normalize(raw: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
 
     ai = raw.get("ai")
     if isinstance(ai, dict):
-        for key in ("provider", "model", "vision_model"):
+        for key in ("provider", "model", "vision_model", "base_url",
+                    "api_key_env"):
             data["ai"][key] = str(ai.get(key) or "")
+        if not data["ai"]["api_key_env"]:
+            data["ai"]["api_key_env"] = "TAK_AI_API_KEY"
+        url = data["ai"]["base_url"]
+        if url and not url.lower().startswith(("http://", "https://")):
+            warnings.append("ai.base_url 不是 http(s) 地址，已忽略")
+            data["ai"]["base_url"] = ""
 
     schema = raw.get("schema")
     if isinstance(schema, int) and schema > CONFIG_SCHEMA:

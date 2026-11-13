@@ -2,7 +2,7 @@
 
 > 选导什么、选导到哪，导到文件或跨 DCC 共享缓存位；在另一个 DCC 里用同一份 profile 打开，做导入校验。
 
-**适用版本** TAK `0.4.0`　·　**DCC** maya / max / mobu / unreal　·　**权限** `scene.read` / `export.fbx` / `import.validate`　·　**UI** `qt`
+**适用版本** TAK `0.5.0`　·　**DCC** maya / max / mobu / unreal　·　**权限** `scene.read` / `export.fbx` / `import.validate`　·　**UI** `qt`
 
 ## 1. 它解决什么问题
 

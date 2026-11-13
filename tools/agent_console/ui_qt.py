@@ -86,6 +86,18 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     input_row.addWidget(line_edit, 1)
     input_row.addWidget(send_button, 0)
 
+    # 连接区：桥接（WorkBuddy → DCC）与 AI 端点（DCC → WorkBuddy）是两条独立通道，
+    # 分开摆在同一行，避免用户以为「连不上 AI 就不能让外部调工具」。
+    connect_row = QtWidgets.QHBoxLayout()
+    connect_row.setSpacing(8)
+    bridge_label = QtWidgets.QLabel("桥接：未启动")
+    bridge_label.setProperty("takMuted", "true")
+    bridge_button = QtWidgets.QPushButton("桥接设置")
+    ai_button = QtWidgets.QPushButton("AI 连接")
+    connect_row.addWidget(bridge_label, 1)
+    connect_row.addWidget(bridge_button, 0)
+    connect_row.addWidget(ai_button, 0)
+
     # 候选 / 报告视图 + 对话日志
     result_table = ResultTable(central)
     log_console = LogConsole(central)
@@ -94,6 +106,7 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     layout.addWidget(title)
     layout.addWidget(subtitle)
     layout.addLayout(input_row)
+    layout.addLayout(connect_row)
     layout.addWidget(result_table, 2)
     layout.addWidget(log_console, 1)
     window.setCentralWidget(central)
@@ -138,6 +151,38 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     send_button.clicked.connect(_on_send)
     line_edit.returnPressed.connect(_on_send)
 
+    # ------------------------------------------------------------ 连接区逻辑
+    def _refresh_bridge_label() -> None:
+        try:
+            from tak.core import bridge
+            status = bridge.bridge_status()
+        except Exception as exc:
+            bridge_label.setText("桥接：状态读取失败（%s）" % type(exc).__name__)
+            return
+        if status.get("running"):
+            bridge_label.setText("桥接：%s · %s" % (
+                status.get("url", ""), status.get("owner", "")))
+        else:
+            bridge_label.setText("桥接：未启动")
+
+    def _open_bridge() -> None:
+        try:
+            _bridge_dialog(QtWidgets, window, dcc, log_console, status,
+                           _refresh_bridge_label)
+        except Exception as exc:
+            log_console.error("桥接设置打开失败: %s: %s" % (type(exc).__name__, exc))
+
+    def _open_ai() -> None:
+        try:
+            _ai_dialog(QtWidgets, window, log_console, status)
+        except Exception as exc:
+            log_console.error("AI 连接设置打开失败: %s: %s"
+                              % (type(exc).__name__, exc))
+
+    bridge_button.clicked.connect(_open_bridge)
+    ai_button.clicked.connect(_open_ai)
+    _refresh_bridge_label()
+
     if apply_theme:
         try:
             apply_theme(window, _THEME)
@@ -148,5 +193,219 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     window._agent_send = _on_send
     window._agent_input = line_edit
     window._agent_core = core
+    window._agent_refresh_bridge = _refresh_bridge_label
     window.show()
     return window
+
+
+# --------------------------------------------------------------------------- #
+# 桥接设置
+# --------------------------------------------------------------------------- #
+def _bridge_dialog(QtWidgets: Any, parent: Any, dcc: str, log_console: Any,
+                   status_bar: Any, on_change: Any) -> Any:
+    """桥接开关 + 地址/token 显示 + 一行 curl 示例。
+
+    token 只显示前 8 位：能确认「换没换过」，又不至于被截图带走。
+    """
+    from tak.core import bridge
+
+    dialog = QtWidgets.QDialog(parent)
+    dialog.setWindowTitle("TAK · 桥接（外部 AI 调用 DCC）")
+    dialog.resize(640, 360)
+    layout = QtWidgets.QVBoxLayout(dialog)
+    layout.setContentsMargins(16, 16, 16, 16)
+    layout.setSpacing(10)
+
+    intro = QtWidgets.QLabel(
+        "桥只监听 127.0.0.1，除 /bridge/health 外都要带 X-TAK-Token。\n"
+        "外部（WorkBuddy / 脚本）用下面的地址查询场景、跑检查、对话，"
+        "写场景仍需在面板内确认。")
+    intro.setWordWrap(True)
+    intro.setProperty("takMuted", "true")
+
+    info = QtWidgets.QPlainTextEdit()
+    info.setReadOnly(True)
+    info.setMinimumHeight(180)
+
+    state = {"running": False}
+
+    def _render() -> None:
+        payload = bridge.bridge_status()
+        state["running"] = bool(payload.get("running"))
+        settings = bridge.tak_config.load()
+        token = str((settings.get("bridge") or {}).get("token") or "")
+        masked = (token[:8] + "…" + token[-4:]) if len(token) > 16 else "(未生成)"
+        lines = [
+            "状态：%s" % ("运行中" if state["running"] else "未启动"),
+            "地址：%s" % (payload.get("url") or "-"),
+            "归属：%s" % (payload.get("owner") or "-"),
+            "token：%s" % masked,
+            "发现文件：%s" % bridge.discovery_path(),
+            "",
+            "可用接口：",
+        ]
+        lines.extend("  " + item for item in bridge.ENDPOINTS)
+        lines.append("")
+        lines.append("等价 curl：")
+        lines.append('  curl -H "X-TAK-Token: <token>" %s/bridge/scene'
+                     % (payload.get("url") or "http://127.0.0.1:PORT"))
+        lines.append("")
+        lines.append("线程：%s" % (
+            "宿主调用已回到主线程" if payload.get("thread_safe")
+            else (payload.get("thread_note") or "未知")))
+        info.setPlainText("\n".join(lines))
+        start_button.setEnabled(not state["running"])
+        stop_button.setEnabled(state["running"])
+        if on_change:
+            on_change()
+
+    start_button = QtWidgets.QPushButton("启动桥接")
+    start_button.setProperty("takPrimary", "true")
+    stop_button = QtWidgets.QPushButton("停止")
+    refresh_button = QtWidgets.QPushButton("刷新")
+    close_button = QtWidgets.QPushButton("关闭")
+
+    buttons = QtWidgets.QHBoxLayout()
+    buttons.addWidget(start_button)
+    buttons.addWidget(stop_button)
+    buttons.addWidget(refresh_button)
+    buttons.addStretch(1)
+    buttons.addWidget(close_button)
+
+    def _start() -> None:
+        payload = bridge.start_bridge(dcc=dcc)
+        if payload.get("ok"):
+            log_console.append("桥接已启动：%s" % payload.get("url"), "info")
+            status_bar.set_status("桥接运行中 · %s" % payload.get("url"))
+        else:
+            log_console.error("桥接启动失败：%s" % payload.get("error"))
+        _render()
+
+    def _stop() -> None:
+        payload = bridge.stop_bridge()
+        log_console.append("桥接已停止（端口 %s）" % payload.get("port"), "info")
+        status_bar.set_status("桥接已停止")
+        _render()
+
+    start_button.clicked.connect(_start)
+    stop_button.clicked.connect(_stop)
+    refresh_button.clicked.connect(_render)
+    close_button.clicked.connect(dialog.accept)
+
+    layout.addWidget(intro)
+    layout.addWidget(info, 1)
+    layout.addLayout(buttons)
+    dialog._refresh = _render
+    _render()
+    dialog.show()
+    return dialog
+
+
+# --------------------------------------------------------------------------- #
+# AI 连接设置
+# --------------------------------------------------------------------------- #
+def _ai_dialog(QtWidgets: Any, parent: Any, log_console: Any,
+               status_bar: Any) -> Any:
+    """AI 端点设置：base_url / 模型 / 密钥环境变量名，外加一次真实探测。"""
+    from tak.core import config as tak_config
+    from tak.core.ai import connection
+
+    dialog = QtWidgets.QDialog(parent)
+    dialog.setWindowTitle("TAK · AI 连接（对话侧走哪个端点）")
+    dialog.resize(660, 380)
+    layout = QtWidgets.QVBoxLayout(dialog)
+    layout.setContentsMargins(16, 16, 16, 16)
+    layout.setSpacing(10)
+
+    intro = QtWidgets.QLabel(
+        "填任何 OpenAI 兼容端点即可（WorkBuddy 网关 / 自建代理 / 官方 API）。\n"
+        "密钥不写进配置文件：只填**环境变量名**，值放在系统环境变量里。")
+    intro.setWordWrap(True)
+    intro.setProperty("takMuted", "true")
+
+    form = QtWidgets.QFormLayout()
+    base_edit = QtWidgets.QLineEdit()
+    base_edit.setPlaceholderText("https://your-gateway/v1")
+    model_edit = QtWidgets.QLineEdit()
+    model_edit.setPlaceholderText("DeepSeek-V4.1-Flash")
+    key_env_edit = QtWidgets.QLineEdit()
+    key_env_edit.setPlaceholderText("TAK_AI_API_KEY")
+    form.addRow("端点 base_url", base_edit)
+    form.addRow("模型", model_edit)
+    form.addRow("密钥环境变量", key_env_edit)
+
+    output = QtWidgets.QPlainTextEdit()
+    output.setReadOnly(True)
+    output.setMinimumHeight(120)
+
+    save_button = QtWidgets.QPushButton("保存")
+    save_button.setProperty("takPrimary", "true")
+    test_button = QtWidgets.QPushButton("测试连接")
+    close_button = QtWidgets.QPushButton("关闭")
+    buttons = QtWidgets.QHBoxLayout()
+    buttons.addWidget(save_button)
+    buttons.addWidget(test_button)
+    buttons.addStretch(1)
+    buttons.addWidget(close_button)
+
+    def _load() -> None:
+        data = tak_config.load()
+        ai = data.get("ai") or {}
+        base_edit.setText(str(ai.get("base_url") or ""))
+        model_edit.setText(str(ai.get("model") or ""))
+        key_env_edit.setText(str(ai.get("api_key_env") or "TAK_AI_API_KEY"))
+        _print(connection.describe(data))
+
+    def _print(payload: dict) -> None:
+        lines = ["就绪：%s" % ("是" if payload.get("ready") else "否"),
+                 "端点：%s（来源 %s）" % (payload.get("base_url"),
+                                       payload.get("base_url_source")),
+                 "模型：%s" % payload.get("model"),
+                 "密钥变量：%s（%s）" % (payload.get("api_key_env"),
+                                     "已设置" if payload.get("api_key_present")
+                                     else "未设置"),
+                 "提示：%s" % payload.get("hint")]
+        for key, label in (("latency_ms", "耗时(ms)"), ("status", "HTTP"),
+                           ("reply", "回复"), ("error", "错误")):
+            if payload.get(key) not in (None, "", 0):
+                lines.append("%s：%s" % (label, payload[key]))
+        output.setPlainText("\n".join(lines))
+
+    def _save() -> None:
+        data = tak_config.load()
+        ai = dict(data.get("ai") or {})
+        ai["base_url"] = base_edit.text().strip()
+        ai["model"] = model_edit.text().strip()
+        ai["api_key_env"] = key_env_edit.text().strip() or "TAK_AI_API_KEY"
+        data["ai"] = ai
+        tak_config.save(data)
+        log_console.append("AI 连接设置已保存到 %s" % tak_config.config_path(),
+                           "info")
+        status_bar.set_status("AI 连接设置已保存")
+        _print(connection.describe())
+
+    def _test() -> None:
+        status_bar.set_status("正在测试 AI 连接…")
+        payload = connection.probe(timeout=10)
+        _print(payload)
+        if payload.get("ok"):
+            log_console.append("AI 连接正常（%s ms）" % payload.get("latency_ms"),
+                               "info")
+            status_bar.set_status("AI 连接正常")
+        else:
+            log_console.error("AI 连接失败：%s" % payload.get("error"))
+            status_bar.set_status("AI 连接失败")
+
+    save_button.clicked.connect(_save)
+    test_button.clicked.connect(_test)
+    close_button.clicked.connect(dialog.accept)
+
+    layout.addWidget(intro)
+    layout.addLayout(form)
+    layout.addWidget(output, 1)
+    layout.addLayout(buttons)
+    dialog._refresh = _load
+    dialog._test = _test
+    _load()
+    dialog.show()
+    return dialog

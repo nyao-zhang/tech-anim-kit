@@ -29,6 +29,16 @@ from tak.core.rules.base import Finding
 TOOL_ID = "qa_inspector"
 TITLE = "场景检查"
 
+#: 这批检查项的数据只来自 ``snapshot["metadata"]["health"]``，快照里没有这个键
+#: 时它们跑出来必然是「0 条结论」。若不在结果里说一句，用户看到的就是「通过」——
+#: 典型假通过。键是 rule_id，值是 health 里对应的字段名。
+HEALTH_DRIVEN_CHECKS: Dict[str, str] = {
+    "rig_health_guard.orphan_nodes": "orphan_nodes",
+    "rig_health_guard.duplicate_shape": "duplicate_shapes",
+    "rig_health_guard.legacy_reference": "references",
+    "rig_health_guard.control_uncolored": "control_colors",
+}
+
 #: 规则提供者：plugin_id -> (分组 id, 分组名, 一句话说明)。
 #: 顺序决定 UI 里检查组的排列顺序（从最基础到最靠近导出）。
 GROUP_META: Dict[str, Dict[str, str]] = {
@@ -255,7 +265,44 @@ def run_report(ctx: Any) -> Any:
         "checks_available": len(checks(dcc=dcc)),
         "providers_failed": dict(failures),
     })
+
+    # 有些检查项的数据只来自 metadata.health。快照没采集到它们时，规则会安静地
+    # 返回 0 条结论 —— 列表里看着像「通过」。这里补一条 INFO，把「这几项其实
+    # 没查」明说出来，并解释为什么。
+    gaps = _health_gaps(snapshot, selected)
+    report.metadata["health_gaps"] = gaps
+    if gaps:
+        report.findings.append(Finding(
+            rule_id=TOOL_ID + ".health.partial",
+            severity=Severity.INFO,
+            message="%(count)d 项检查本次未真正执行（缺少对应场景数据）：%(items)s"
+                    % {"count": len(gaps),
+                       "items": "、".join(item["check"] for item in gaps)},
+            fix_hint="确认在 DCC 内运行且适配器已采集 metadata.health；"
+                     "Mock / 离线快照不会带上这些字段。",
+            data={"gaps": gaps},
+        ))
     return report
+
+
+def _health_gaps(snapshot: Any, selected: Iterable[str]) -> List[Dict[str, str]]:
+    """列出「已勾选、但快照里没有对应数据」的检查项。"""
+    health = {}
+    metadata = snapshot.get("metadata") if isinstance(snapshot, dict) else None
+    if isinstance(metadata, dict) and isinstance(metadata.get("health"), dict):
+        health = metadata["health"]
+    selected_set = {str(item) for item in selected}
+    gaps: List[Dict[str, str]] = []
+    for rule_id, key in sorted(HEALTH_DRIVEN_CHECKS.items()):
+        if rule_id not in selected_set or key in health:
+            continue
+        gaps.append({
+            "check": rule_id.rsplit(".", 1)[-1],
+            "rule_id": rule_id,
+            "health_key": key,
+            "reason": "快照 metadata.health 中没有 %s" % key,
+        })
+    return gaps
 
 
 def _has_source(snapshot: Any) -> bool:
