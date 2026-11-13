@@ -888,3 +888,61 @@ def test_install_creates_missing_scripts_dir(monkeypatch, tmp_path):
                          "userSetup.py")
     assert os.path.isfile(entry)
     assert "TAK BEGIN" in open(entry, encoding="utf-8").read()
+
+
+# --------------------------------------------------------------------------
+# 启动块内的诊断输出：register_menu() 按约定不抛异常只返回 {ok, reason}，
+# 块里若不看返回值，「导入成功但菜单没出现」就是一片安静。
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("dcc,label", [("maya", "Maya"), ("mobu", "MoBu")])
+def test_startup_block_reports_menu_failure_reason(dcc, label):
+    """Maya / MoBu 的块模板必须检查 register_menu() 的 ok 并打印 reason。"""
+    template = targets_mod.TARGETS[dcc]["block_template"]
+    assert "_tak_menu_result" in template, "%s 块没有检查 register_menu() 的返回" % label
+    assert '.get("ok")' in template, "%s 块没有判 ok" % label
+    assert "%s 菜单未注册" % label in template, "%s 块没有打印失败原因" % label
+
+
+def test_startup_block_diagnostics_do_not_raise():
+    """块模板本身必须能过 AST（3.9 语法）——它是写进宿主启动文件的，语法错就是启动错。"""
+    import ast
+
+    for dcc in ("maya", "mobu", "unreal"):
+        source = targets_mod.TARGETS[dcc]["block_template"]
+        ast.parse(source, feature_version=(3, 9))
+
+
+def test_max_block_reports_menu_state():
+    """3ds Max 走 MaxScript，诊断由 init_max.initialize() 打印；这里锁住调用本身。"""
+    template = targets_mod.TARGETS["max"]["block_template"]
+    assert "_tak_max.initialize()" in template
+
+
+# --------------------------------------------------------------------------
+# 启动块内的诊断输出：register_menu() 按约定不抛异常只返回 {ok, reason}，
+# 块里若不看返回值，「导入成功但菜单没出现」就是一片安静。
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("dcc,label", [("maya", "Maya"), ("mobu", "MoBu")])
+def test_startup_block_reports_menu_failure_reason(dcc, label):
+    """Maya / MoBu 的块模板必须检查 register_menu() 的 ok 并打印 reason。"""
+    template = targets_mod.TARGETS[dcc]["block_template"]
+    assert "_tak_menu_result" in template, "%s 块没有检查 register_menu() 的返回" % label
+    assert '.get("ok")' in template, "%s 块没有判 ok" % label
+    assert "%s 菜单未注册" % label in template, "%s 块没有打印失败原因" % label
+
+
+def test_startup_block_diagnostics_do_not_raise():
+    """块模板本身必须能过 AST（3.9 语法）——它是写进宿主启动文件的，语法错就是启动错。"""
+    import ast
+
+    for dcc in ("maya", "mobu", "unreal"):
+        source = targets_mod.TARGETS[dcc]["block_template"]
+        ast.parse(source, feature_version=(3, 9))
+
+
+def test_max_block_reports_menu_state():
+    """3ds Max 走 MaxScript，诊断由 init_max.initialize() 打印；这里锁住调用本身。"""
+    template = targets_mod.TARGETS["max"]["block_template"]
+    assert "_tak_max.initialize()" in template

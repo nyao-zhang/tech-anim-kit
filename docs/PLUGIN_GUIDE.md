@@ -229,7 +229,7 @@ assert a["version"] == b["version"]           # 同进程两次
 `tak/install` 的写入模型是**标记块**，不是「生成整份配置文件」：
 
 ```
-# >>> TAK BEGIN maya v0.3.0
+# >>> TAK BEGIN maya v0.3.1
 ...生成的内容（块外内容不受影响）...
 # >>> TAK END maya
 ```

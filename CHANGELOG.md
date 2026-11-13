@@ -13,6 +13,40 @@
 
 （无）
 
+## [0.3.1] - 2026-11-13
+
+补丁版：修掉 0.3.0 安装器的一处静默失败，并为此补上回归护栏。无接口变更，
+无行为变更——只让失败能被看见。测试 **1117 → 1121**（+4）。
+
+### Fixed
+
+- **「装了、导入成功了、菜单却没出现」时安装块一声不吭**（`tak/install/targets.py`）。
+  `tak/adapters/maya/menu.py` 与 `mobu/menu.py` 按约定**不抛异常**、只返回
+  `{"ok": False, "reason": "..."}`；而安装器生成的启动块是 `_tak_register_menu()`
+  裸调用、把返回值丢掉，外层的 `except` 也只在真抛异常时才打印。两者叠加的结果是
+  绝大多数失败路径都走不到任何输出。
+  这不是推测：真机安装（Maya 2026 / MoBu 2023 / UE 5.8）后执行 `userSetup.py`，
+  控制台**一行都没有**。现在块内检查 `.get("ok")` 并打印 `reason`，Maya / MoBu 两处同改。
+  3ds Max 与 UE 本来就没这个问题：`init_max.initialize()` 会打 `menu.ok=%s` 与降级原因，
+  `init_unreal.main()` 把每条降级都 `print` 出来并把结果放进返回字典。
+- **`tak/install/writer.py` docstring 里的标记块示例写死 `v0.3.0`**：版本一动它就变成过期文档。
+  改成 `v<版本>` 占位。`tests/test_release_meta.py` 只拦**带引号**的版本字面量，
+  这种写在 docstring 里没引号的示例它扫不到，所以手工修——这也说明那道护栏有已知盲区。
+
+### Added
+
+- `tests/test_installer.py` 新增 4 个用例：Maya / MoBu 块必须检查 `register_menu()` 的 `ok`
+  并打印失败原因；Maya / MoBu / UE 三个块的模板必须能过 `ast.parse(feature_version=(3, 9))`
+  （块是直接写进宿主启动文件的，语法错等于宿主启动错）；Max 块必须保留 `initialize()` 调用。
+
+### Known limitations
+
+- **备份会一直累积**：每次 `replace-block` 都在入口文件旁留一份 `<file>.tak-backup-<N>`，
+  `N` 只增不覆盖；`--uninstall` 也会再留一份（这是刻意的——`backup-1` 往往就是装上 TAK 之前
+  的原始文件，删掉就没法回到原点）。代价是频繁重装会在宿主启动目录堆出若干 1 KB 小文件，
+  目前**没有清理入口**，需要手工删。真机现状：`Documents/maya/2026/scripts/` 下 2 份，
+  `MB/2023/config/PythonStartup/` 下 2 份，UE 项目 `Content/Python/` 下 1 份。
+
 ## [0.3.0] - 2026-11-13
 
 对应批次 4（P6）：动作语义检索、ML Deformer 数据工厂、一条命令安装器、发布工程化。
@@ -103,6 +137,7 @@
 ---
 
 [Unreleased]: #unreleased
+[0.3.1]: #031---2026-11-13
 [0.3.0]: #030---2026-11-13
 [0.2.0]: #020---2026-11-13
 [0.1.0]: #010---2026-11-12

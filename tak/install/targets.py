@@ -70,7 +70,11 @@ except Exception as _tak_exc:
 
 if _tak_register_menu is not None:
     try:
-        _tak_register_menu()
+        # register_menu() 按约定不抛异常，而是返回 {ok, reason}；
+        # 必须把 reason 打出来，否则「装了但没菜单」又变成静默失败。
+        _tak_menu_result = _tak_register_menu()
+        if not _tak_menu_result.get("ok"):
+            print("[TAK] Maya 菜单未注册：%s" % _tak_menu_result.get("reason"))
     except Exception as _tak_exc:
         print("[TAK] Maya 菜单注册失败：%s: %s" % (type(_tak_exc).__name__, _tak_exc))
 """
@@ -100,7 +104,9 @@ except Exception as _tak_exc:
 
 if _tak_register_menu is not None:
     try:
-        _tak_register_menu()
+        _tak_menu_result = _tak_register_menu()
+        if not _tak_menu_result.get("ok"):
+            print("[TAK] MoBu 菜单未注册：%s" % _tak_menu_result.get("reason"))
     except Exception as _tak_exc:
         print("[TAK] MoBu 菜单注册失败：%s: %s" % (type(_tak_exc).__name__, _tak_exc))
 """

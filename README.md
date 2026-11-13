@@ -2,7 +2,7 @@
 
 跨 DCC 技术动画工具集，面向 **Maya 2023+ / 3ds Max 2023+ / MotionBuilder 2023+ / Unreal Engine 5.8–5.9**。
 
-> 当前版本 `0.3.0`（**P0 – P6 已完成**，即批次 1–4）。核心层零 DCC 依赖，**1117 个测试全绿、`tak.core` 覆盖率 90%**；十一个工具插件、四端适配器、Qt 与 Web 面板、AI 工作台（Agent Console / Skeleton Mapper / VLM 缺陷诊断 / 绑定知识库 RAG）、动作语义检索、ML Deformer 数据集工厂、一条命令安装器均已落地。Maya 2023/2024/2026 与 UE 5.8.4 真机验证，**四端一致性回归 PASS**。详见 [变更日志](CHANGELOG.md) 与 [批次 4 交付报告](docs/BATCH4_REPORT.md)。
+> 当前版本 `0.3.1`（**P0 – P6 已完成**，即批次 1–4）。核心层零 DCC 依赖，**1121 个测试全绿、`tak.core` 覆盖率 88.97%**；十一个工具插件、四端适配器、Qt 与 Web 面板、AI 工作台（Agent Console / Skeleton Mapper / VLM 缺陷诊断 / 绑定知识库 RAG）、动作语义检索、ML Deformer 数据集工厂、一条命令安装器均已落地。Maya 2023/2024/2026 与 UE 5.8.4 真机验证，**四端一致性回归 PASS**。详见 [变更日志](CHANGELOG.md) 与 [批次 4 交付报告](docs/BATCH4_REPORT.md)。
 
 ## 设计原则
 
@@ -17,7 +17,7 @@
 
 ```bash
 pip install pytest pytest-cov
-python -m pytest -q                                   # 1117 tests
+python -m pytest -q                                   # 1121 tests
 python -m pytest --cov=tak.core --cov-fail-under=80 -q  # 核心层硬门槛（当前 90%）
 python validation/py_compat_smoke.py                   # 跨版本冒烟：无需 pytest / 无需 DCC
 python tak/ui/generate_theme.py --check                # CI：生成物未漂移
@@ -111,7 +111,7 @@ python validation/run_probe.py --script ue_adapter_probe.py
 | `tools/` | 11 个工具插件 + `_template/` 模板 + `new_tool.py` 脚手架 |
 | `knowledge/` | 5 篇绑定知识库种子文档（命名、权重、FBX/UE 流水线、IK 重定向、DCC 差异） |
 | `fixtures/` | 20 好 + 20 坏骨架快照，判定器回归基线 |
-| `tests/` | 38 个测试模块 / 1117 个用例 |
+| `tests/` | 38 个测试模块 / 1121 个用例 |
 | `validation/` | UE headless 探测、mayapy 全量回归、跨版本冒烟、**四端一致性回归**与实测证据 JSON |
 | `CHANGELOG.md` | 变更日志（含每版的已知限制） |
 | `legacy/sources/` | 本机自研代码的只读整理副本（原文件未改动） |
@@ -212,7 +212,7 @@ print(apply_plan(plan))                 # dry-run：返回将要做的事，磁�
 
 | 环境 | 状态 |
 |---|---|
-| 本机 Python 3.13 + pytest | ✅ **1117 个测试全绿**；`tak.core` 覆盖率 **90%**（CI 硬门槛 80%） |
+| 本机 Python 3.13 + pytest | ✅ **1121 个测试全绿**；`tak.core` 覆盖率 **88.97%**（CI 硬门槛 80%） |
 | 全量覆盖率 | ℹ️ 74%（`tak.adapters` / `tak.ui` 依赖宿主 GUI 与 UE 运行时，无头环境无法真实覆盖；CI 仅作观测，不设门槛） |
 | Python 3.9 语法兼容 | ✅ 178 个 `.py` 全量 `ast.parse(feature_version=(3,9))` 通过；core 层无真实 DCC import |
 | **四端一致性回归** | ✅ `validation/four_dcc_regression.py`：40 fixtures × maya / max / mobu / unreal **判定漏报 0 / 误报 0 / 契约错误 0 / 基线差异 0 / 跨端差异 0**；UE 适配器 17 项观测性漏报已在 `capability_note` 登记为能力边界（不判失败） |

@@ -18,7 +18,7 @@ python -m pytest -q         # 必须全绿
 **唯一事实源是 `tak/version.py`**。其它地方一律引用它，不得硬编码：
 
 ```python
-from tak.version import __version__          # 0.3.0
+from tak.version import __version__          # 0.3.1
 ```
 
 需要同步的位置（`tests/test_release_meta.py` 会逐项校验）：

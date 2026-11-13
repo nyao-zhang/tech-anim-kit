@@ -112,3 +112,29 @@ python tools/new_tool.py --list
 
 回填格式：`B21 ✅ Maya2023 / Win11 / 备注：…`。
 **注意**：B21–B24 会真的写用户目录。执行前先 `--plan` 看一眼，确认 `[create]` / `[append]` 的路径是你预期的那个；安装器只改自己的标记块，但路径选错仍然会写错地方。
+
+### F.1 已在真机实际执行的部分（2026-11-13，Windows 11 / Python 3.13）
+
+下表是**已经跑过并留下输出**的步骤。它覆盖 B21–B24 里「不打开 DCC 也能判定」的那一半，
+**不覆盖**「重启 Maya 后菜单栏是否真的出现」这类只有 GUI 能回答的部分——那部分仍待你复验。
+
+| 步骤 | 实际执行 | 结果 |
+|---|---|---|
+| 探测 | `python -m tak.install --list` | 识别到 **Maya 2026**（`Documents/maya/2026`）与 **MoBu 2023**（`Documents/MB/2023`）；3ds Max 报未发现，因为本机只有 2019/2021，低于 `min_version="2023"`——**这是正确行为，不是缺陷** |
+| 首次安装 | `--apply --dcc maya,mobu,unreal --root unreal=<项目>/Content/Python` | `create=3`。三个入口文件此前都不存在，均为新建：`maya/2026/scripts/userSetup.py`、`MB/2023/config/PythonStartup/tak_startup.py`、`面部AR示例/Content/Python/init_unreal.py` |
+| 幂等 | 紧接着再跑 `--plan` | 三个目标全部 `[skip]`，`skip=3`，未产生第二个标记块 |
+| 卸载可逆 | `--uninstall --apply` 后重新 `--apply` | 块内内容删除后文件回到「只有块」前的状态；重新安装得到同内容（`replace-block` 而非追加） |
+| 语法 | 对三份落盘文件跑 `ast.parse(feature_version=(3, 9))` | 全部通过——块在 Maya 2023 的 Python 3.9 里能编译 |
+| 执行（无宿主） | 在普通 Python 里 `exec()` 三份启动文件 | 无异常；`tak` 与 `tak.adapters.maya.menu` 均加载成功；Maya 块输出 `[TAK] Maya 菜单未注册：maya.cmds 不可用（无 Maya 宿主）`——**无宿主时这是正确降级** |
+| 版本刷新 | 0.3.1 后重新 `--apply` | `replace-block=3` → 再 `--plan` 全部 `skip`；块头变为 `# >>> TAK BEGIN maya v0.3.1` |
+
+**仍需你做的**（GUI 才能回答，agent 无法替代）：
+
+1. **B21 核心项**：启动 Maya 2026，看菜单栏是否出现 `TAK / Tech Anim Kit`；六个菜单项是否可点；
+   在脚本编辑器里连跑两次 `from tak.adapters.maya.menu import register_menu; register_menu()`
+   —— 应当**只有一份菜单**（`cmds.menu` 本身不查重，代码里是先 `deleteUI` 再建）。
+2. **B22**：MoBu 2023 启动是否无报错、菜单是否出现。Max 需要 2023+ 才能测。
+3. **B23**：UE 编辑器输出日志里是否有 `[TAK]` 行、`TAK` 菜单是否出现在工具栏。
+4. **B24 完整项**：卸载后**哈希**是否与安装前逐字节一致（我这里验的是「块被删除、文件可重建」，
+   没做安装前的 `sha256sum` 留底——因为三个文件在安装前都不存在，无法先算哈希）。
+5. **B25 / B26**：真实动作库与生产骨架，见上表。
