@@ -5,7 +5,7 @@
     "menu": "TAK",
     "ok": true,
     "repo_root": "C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35",
-    "version": "0.3.2"
+    "version": "0.3.3"
   },
   "errors": [],
   "inside_maya": true,
@@ -25,7 +25,7 @@
   "sys_path_total": 44,
   "tak_file": "C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35\\tak\\__init__.py",
   "tak_importable": true,
-  "tak_version": "0.3.2",
+  "tak_version": "0.3.3",
   "user_app_dir": "C:/Users/NYAO/Documents/maya/",
   "user_script_dir": "C:/Users/NYAO/Documents/maya/2026/zh_CN/scripts/"
 }
