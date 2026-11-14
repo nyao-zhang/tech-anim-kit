@@ -1,7 +1,7 @@
 # 让外部 AI 直接操作 DCC 场景（MCP）
 
 > 一句需求 → AI 选出受限动作 → 本地桥 → Maya 主线程 → 真实查改场景。
-> 适用 TAK `0.7.2`　·　当前已实现宿主：**Maya 2023+**（Max / MoBu / UE 的能力表会列出，但没有宿主 handler，调用会明确报「未实现」）。
+> 适用 TAK `0.8.0`　·　当前已实现宿主：**Maya 2023+**（Max / MoBu / UE 的能力表会列出，但没有宿主 handler，调用会明确报「未实现」）。
 
 ## 1. 它和 v0.6 的「对话控制台」不是一回事
 
@@ -117,7 +117,7 @@ python validation/mcp_handshake_check.py --minimal-env  # 把 env 全丢掉再�
 
 token 绑定动作名与参数，改一个字就失效，5 分钟过期。面板里还有 **「撤销上一次」** 按钮，对应 MCP 工具 `tak_undo`。
 
-## 3. 可用工具（21 个）
+## 3. 可用工具（22 个 = 19 个动作 + 3 个元工具）
 
 | 分类 | MCP 工具 | 作用 |
 |---|---|---|
@@ -141,9 +141,34 @@ token 绑定动作名与参数，改一个字就失效，5 分钟过期。面板
 | 写入 | `tak_node_parent` | 改父子关系 |
 | 写入 | `tak_attr_set` | 设置属性 |
 | 写入 | `tak_selection_set` | 设置选择集 |
+| 写入 | `tak_scene_create_cube_chain` | **v0.8.0**：一次建 N 个随机大小立方体，按体积降序连成父子链（最大为最父级），一次确认、一次撤销 |
 | 写入 | `tak_scene_undo_tak` | 撤销最近一次 TAK 写入 |
 
 写工具的参数 schema 里额外有 `confirm` / `confirm_token` 两个字段，这是两阶段确认用的，不属于动作参数。
+
+### 3.1 批量动作：`tak_scene_create_cube_chain`
+
+对着「创建十个随机大小在 10~100 立方厘米的正方块，以大小体积做父子关系，最大的作为最父级」这种需求，**不要**拆成 10 次 `tak_node_create` + 9 次 `tak_node_parent`：每个写操作都要单独 dry-run + 人肉确认，拆开根本不可操作。一次调用即可：
+
+```json
+{
+  "count": 10, "min_size": 10, "max_size": 100,
+  "size_by": "volume", "seed": 2024,
+  "prefix": "takCube", "link": true
+}
+```
+
+| 参数 | 含义 |
+|---|---|
+| `count` | 1~50，默认 10 |
+| `min_size` / `max_size` | 尺寸范围，默认 10 / 100 |
+| `size_by` | `volume`（默认）= 按体积 cm³ 解释，边长 = 体积^(1/3)，所以 10~100 cm³ 对应边长约 2.15~4.64 cm；`edge` = 按边长 cm 解释。预览里会写明用的是哪种，避免「立方厘米」这个歧义闷在心里 |
+| `seed` | 随机种子。**相同 seed 的尺寸、名字、层级完全一致**，dry-run 与带 token 第二次执行靠它对齐，预览绝不会和落地结果不一样 |
+| `link` | 是否按体积降序连成父子链（最大 = 最父级） |
+| `spacing` | `-1`（默认）= 自动按最大边长 ×1.6 沿本地 X 轴逐级排开，避免同心立方体被最大的包住看不见；`0` = 真的全部在原点；`>0` = 指定间距 cm |
+| `prefix` | 命名前缀，实际名字 `prefix_01 …`，编号即层级顺序 |
+
+执行前整体查重：任何一个名字已被占用就整体失败、不留半成品。Maya 侧整批在一个 undo chunk 里，`tak_undo` 一次全撤。
 
 ## 4. 一次典型的写入对话
 
@@ -176,7 +201,7 @@ AI 把 preview 原样展示给你，你说「做吧」，它才发第二次：
 | 边界 | 实现 |
 |---|---|
 | 网络 | 桥只绑 `127.0.0.1`，所有业务请求要 `X-TAK-Token`（首次启动随机生成） |
-| 能力 | 18 个动作的硬白名单；没有 `eval` / `exec` / 任意脚本执行 |
+| 能力 | 19 个动作的硬白名单；没有 `eval` / `exec` / 任意脚本执行 |
 | 参数 | 类型、必填、枚举、范围、长度、未知参数校验；数字不接受 `NaN` |
 | 写入 | 默认 `allow_write=false`；即使打开也要 dry-run → token → 人工确认 |
 | 主线程 | Maya 侧所有宿主调用经 `maya.utils.executeInMainThreadWithResult` 切回主线程，HTTP 线程不直接碰 `cmds` |
@@ -192,6 +217,9 @@ AI 把 preview 原样展示给你，你说「做吧」，它才发第二次：
 | 昨天改对了，重新 Trust / 重新添加后又超时 | 客户端 UI 的表单把含 `maya.exe` 的 v0.7.0 旧片段**写回** `mcp.json`（v0.7.2 实测：`mcp.json` mtime 与 `wb:mcp:remove` → `wb:mcp:connect` 日志对得上）。不要在表单里沿用旧值；重跑一键修复，再重启客户端让它重新读文件 |
 | 握手成功，但每个工具都回「桥未启动」 | 客户端把 `env` 当全量替换，进程里没有 `USERPROFILE`，`expanduser("~")` 返回字面 `~`，发现文件找不到。v0.7.2 起 `tak_mcp_entry.py` 会自补，确认 `args` 指向它；若仍是 `-m tak.mcp`，补 `TAK_HOME` 为 `~/.tak` 的绝对路径，并用 `python -m tak.mcp --status` 对比 |
 | 自检报 `args 指向的启动脚本不存在` | 仓库被移动或只拷贝了 `tak/` 包。把 `scripts/tak_mcp_entry.py` 一起带上，或让 `config_snippet()` 回落到 `-m tak.mcp` 并补全 `env` |
+| 升级后 `tools/list` 工具数没变 / 新动作调不通 | 桥跑在 **DCC 进程里**，DCC 没重启时上报的仍是启动那一刻加载的旧能力表。v0.8.0 起 `tools/list` 会返回 `capabilities_stale=true` 与 `stale_hint`，列出少了哪些动作；**重启 Maya**（或重新加载 TAK）后从 21 变 22 个 |
+| 面板报 `AI 端点不可用，已用本地解析：HTTP 422 ... tools[0]: missing field type` | v0.7.x 把 MCP `tools/list` 格式直接发给了 `chat/completions`。v0.8.0 起 `openai_tools()` 转成 `{"type":"function","function":{...,"parameters"}}`，此错误不应再出现 |
+| 一句「创建十个随机大小的方块」回「创建需要给出名字」 | v0.7.x 本地解析只认单节点创建。v0.8.0 起识别中文/阿拉伯数量词、范围、单位与父子关键词，映射到 `scene.create_cube_chain`；若 DCC 没重启，面板仍是旧注册表，需重启 Maya |
 | `TAK 桥未启动` | 在 Maya 面板点「启动桥接」；`python -m tak.mcp --status` 确认 |
 | `401 缺少或错误的 X-TAK-Token` | `~/.tak/config.json` 的 `bridge.token` 与发现文件不一致；停桥再启动一次 |
 | `外部写入未启用` | 面板勾选「允许写入」，或 `python -m tak.core.bridge write on` |
@@ -206,7 +234,7 @@ AI 把 preview 原样展示给你，你说「做吧」，它才发第二次：
 面板里的自然语言框有两条解析路径：
 
 - **配了 AI 端点**：OpenAI 兼容 `tools` function calling，任意说法都能理解（12 秒超时，失败自动降级）；
-- **没配（默认）**：本地关键词解析，覆盖「场景概况 / 帧范围 / 列节点 / 找节点 / 当前选择 / 骨架层级 / 蒙皮信息 / 节点连接 / 创建 / 改名 / 删除」这些高频句式。解析不出来会明确提示，不瞎猜，并回退到旧的规则问答。
+- **没配（默认）**：本地关键词解析，覆盖「场景概况 / 帧范围 / 列节点 / 找节点 / 当前选择 / 骨架层级 / 蒙皮信息 / 节点连接 / 创建 / 改名 / 删除 / 批量创建随机立方体链」这些高频句式。解析不出来会明确提示，不瞎猜，并回退到旧的规则问答。
 
 MCP 侧不依赖 AI 端点：外部 AI 客户端自己就是模型，TAK 只提供工具。
 
@@ -230,3 +258,13 @@ v0.7.2 证明了「重启前那步配置被回写」确实是本次超时的原�
 | `--minimal-env`：`env` 整段丢掉，只留 `SystemRoot` / `PATH` | 约 700 ms | 21 个工具，`bridge_running=true` | 同样读到 `1–120` |
 
 第二行是关键：没有 `PYTHONPATH`、没有 `USERPROFILE`、没有 `TAK_HOME`，启动器照样 import 到 tak 并找到桥发现文件。证据文件在 `validation/mcp_handshake_result.json` 与 `validation/mcp_minimal_env_result.json`。**仍然没有代跑的一步**：客户端 UI 里点 Trust / 重启后是否重新加载新配置——这必须由你在客户端里操作一次；操作后如果又超时，先看 `~/.workbuddy/mcp.json` 的 `command`，八成又被表单写回旧值了。
+
+v0.8.0 另外做了三次真实验证：
+
+| 验证 | 结果 |
+|---|---|
+| 真实 `deepseek-v4-flash` function calling | 修复前 HTTP 422；修复后 1.51 s 返回 `ok=true`、`mode=model`，模型直接选中 `tak_scene_create_cube_chain`，参数 `count=10 / size_by=volume / link=true` |
+| `mayapy validation/maya_cube_chain_probe.py` | `ok=true`、26 步无失败。10 个立方体边长 4.596→2.207 cm、体积 97.06→10.75 cm³ 严格降序；父子链正确、自动间距 7.353 cm、一次撤销 10 个节点全消失、重名整体拒绝无半成品 |
+| 全量 `pytest` | 1236 个用例通过 |
+
+证据：`validation/maya_cube_chain_probe_result.json`。**注意**：探针是独立 mayapy 进程；你当前开着的 Maya GUI 仍是旧注册表，需要重启 Maya 后桥才会上报第 19 个动作（重启前 `tools/list` 会给 `capabilities_stale=true`）。

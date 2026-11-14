@@ -6,17 +6,17 @@
     {
       "name": "initialize",
       "ok": true,
-      "ms": 700.0,
+      "ms": 644.0,
       "error": "",
       "detail": {
         "name": "tak-scene-bridge",
-        "version": "0.7.2"
+        "version": "0.8.0"
       }
     },
     {
       "name": "tools/list",
       "ok": true,
-      "ms": 117.3,
+      "ms": 106.3,
       "error": "",
       "detail": {
         "tools": 21,
@@ -34,7 +34,7 @@
     {
       "name": "tak_scene_summary",
       "ok": true,
-      "ms": 7.7,
+      "ms": 7.6,
       "error": "",
       "detail": {
         "ok": true,
@@ -60,5 +60,5 @@
   "tool_count": 21,
   "bridge_running": true,
   "bridge_url": "http://127.0.0.1:64486",
-  "stderr": "[tak.mcp] TAK MCP server 0.7.2 ready (bridge=http://127.0.0.1:64486)\r\n"
+  "stderr": "[tak.mcp] TAK MCP server 0.8.0 ready (bridge=http://127.0.0.1:64486)\r\n"
 }

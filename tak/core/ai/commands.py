@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import json
+import random
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -30,13 +31,15 @@ SYSTEM_PROMPT = """你是 Maya / Max / MotionBuilder / UE 技术动画助手，�
 - 查询类工具可以连续调用多个（例如先 scene.find 再 scene.get_node）。
 - 写入类工具你只负责给出参数；系统会自动做 dry-run 预览并等待人工确认，你不要尝试自己确认或绕过。
 - 一次最多一个写操作。不知道确切节点名时，先用 scene.find 或 scene.list_nodes 查。
+- 用户要「创建 N 个随机大小的方块并按大小做父子」这类复合需求时，用 scene.create_cube_chain 一次完成，不要拆成 N 次 node.create + N 次 node.parent（每个写操作都要单独人工确认）。用 volume 还是 edge 按用户给的单位判断；没给 seed 就给一个整数；不要主动把 spacing 设成 0（会同心重叠看不见），留默认值自动排开即可。
 - 用户的问题无法用现有工具完成时，用一句中文说明缺什么，不要假装已经做了。
 - 回答用简体中文。"""
 
 _LOCAL_HINT = ("未配置 AI 端点或端点不可用，已使用本地关键词解析。"
                "可识别：查场景概况 / 帧范围 / 列出节点 / 找节点 / 当前选择 / "
                "骨架层级 / 蒙皮信息 / 节点连接 / 创建 locator·joint·group·cube / "
-               "重命名 / 删除 / 设属性。想要任意说法请在「AI 连接」里配好端点。")
+               "重命名 / 删除 / 设属性 / 批量创建随机大小立方体并按体积排父子链。"
+               "想要任意说法请在「AI 连接」里配好端点。")
 
 _IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_:|]{1,63}")
 _STOPWORDS = frozenset({
@@ -52,6 +55,80 @@ _NAME_HINT = re.compile(
     # 一个名字都抽不到，本地解析会假装听不懂。
     r"(?:叫|名为|名字是|名称是|节点|网格|mesh|选|把|对|将|改成|改为)\s*"
     r"[「『\"'`]?\s*([A-Za-z_][A-Za-z0-9_:|]{0,63})[」』\"'`]?", re.I)
+
+
+# --------------------------------------------------------------------------- #
+# 批量复合需求：N 个随机大小立方体 + 按体积排父子链
+# --------------------------------------------------------------------------- #
+_CN_DIGITS = {"零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+              "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+_COUNT_RE = re.compile(
+    r"([0-9]+|[零一二两三四五六七八九十]+)\s*"
+    r"(?:个|块|台|只|根|立方体|正方块|方块|cubes?)", re.I)
+_RANGE_RE = re.compile(
+    r"([0-9]+(?:\.[0-9]+)?)\s*(?:~|～|-|—|到|至)\s*"
+    r"([0-9]+(?:\.[0-9]+)?)")
+
+
+def _cn_number(token: str) -> Optional[int]:
+    token = str(token or "").strip()
+    if token.isdigit():
+        return int(token)
+    if token == "十":
+        return 10
+    if "十" in token:
+        left, _, right = token.partition("十")
+        tens = _CN_DIGITS.get(left, 1) if left else 1
+        ones = _CN_DIGITS.get(right, 0) if right else 0
+        if left and left not in _CN_DIGITS:
+            return None
+        if right and right not in _CN_DIGITS:
+            return None
+        return tens * 10 + ones
+    return _CN_DIGITS.get(token)
+
+
+def _cube_chain_call(raw: str, low: str) -> Optional[Dict[str, Any]]:
+    """把「创建十个随机大小 10~100 立方厘米的方块，按体积做父子」变成一个动作。
+
+    只在这里生成随机 ``seed``：它随 calls 回传，所以 dry-run 预览与点「执行」
+    后真正建出来的尺寸、名字、层级完全一致。
+    """
+    if not any(key in low for key in ("创建", "新建", "建", "生成", "create", "make")):
+        return None
+    if not any(key in low for key in ("方块", "正方", "立方体", "cube")):
+        return None
+    matched = _COUNT_RE.search(raw)
+    if not matched:
+        return None
+    count = _cn_number(matched.group(1))
+    if not count or count < 2 or count > 50:
+        return None
+
+    low_v, high_v = 10.0, 100.0
+    ranged = _RANGE_RE.search(raw)
+    if ranged:
+        low_v, high_v = float(ranged.group(1)), float(ranged.group(2))
+        if low_v <= 0 or high_v <= 0 or low_v > high_v:
+            return None
+
+    # 「立方厘米 / 体积」按体积解释；只说「厘米 / 大小」按边长解释。
+    # 注意不能用宽泛的「立方」：「立方体」只是 cube 的中文名，不是体积单位。
+    volume_words = ("立方厘米", "立方公分", "立方cm", "cm³", "cm3", "cc", "体积")
+    size_by = "volume" if any(key in low for key in volume_words) else "edge"
+    link = any(key in low for key in
+               ("父子", "父级", "层级", "链", "最大", "按大小", "按体积", "排序"))
+    # 不传 spacing 让它走动作的「自动排开」默认值：10 个同心立方体会被
+    # 最大的完全包住，看起来像只建了一个。用户明确要求重叠时才传 0。
+    params: Dict[str, Any] = {
+        "count": count, "min_size": low_v, "max_size": high_v,
+        "size_by": size_by, "link": bool(link),
+        "prefix": "takCube",
+        "seed": random.randrange(1, 2147483647),
+    }
+    if any(key in low for key in ("原点", "重叠", "同一位置", "不要偏移")):
+        params["spacing"] = 0.0
+    return {"action": "scene.create_cube_chain", "params": params}
 
 
 def _names(text: str) -> List[str]:
@@ -102,7 +179,12 @@ def parse_local(text: str) -> Dict[str, Any]:
     calls: List[Dict[str, Any]] = []
 
     # --- 写操作（只生成调用，执行仍要 UI 上的人工确认） -------------------
-    if any(key in low for key in ("创建", "新建", "建一个", "加一个", "添加", "create")):
+    # 批量复合需求必须先判：否则「创建十个随机方块」会被下面的单节点分支
+    # 误当成「创建需要给出名字」而直接拒掉。
+    batch = _cube_chain_call(raw, low)
+    if batch:
+        calls.append(batch)
+    elif any(key in low for key in ("创建", "新建", "建一个", "加一个", "添加", "create")):
         if not names:
             return {"ok": False, "calls": [], "mode": "local",
                     "hint": "创建需要给出名字，例如「创建一个 locator 叫 foot_ctrl」",
@@ -200,7 +282,9 @@ def parse_with_model(text: str, provider: Any = None) -> Dict[str, Any]:
         if client is None or not hasattr(client, "chat_tools"):
             return {"ok": False, "mode": "model",
                     "error": "当前 provider 不支持 function calling，使用本地解析"}
-        tools = sa.REGISTRY.mcp_tools()
+        # 这里必须是 OpenAI function calling 格式，不是 MCP tools/list 格式；
+        # 传错会得到 HTTP 422: tools[0]: missing field `type`。
+        tools = sa.REGISTRY.openai_tools()
         message = client.chat_tools(
             [{"role": "system", "content": SYSTEM_PROMPT},
              {"role": "user", "content": str(text)}],
@@ -311,6 +395,26 @@ def command(message: str = "", *, calls: Any = None, dcc: str = "maya",
     return payload
 
 
+def _cube_chain_summary(preview: Dict[str, Any]) -> str:
+    """批量预览太长，压成一句人话；完整明细仍在 preview 里可查。"""
+    cubes = preview.get("cubes") or []
+    count = int(preview.get("count") or len(cubes))
+    bounds = list(preview.get("range") or [0, 0]) + [0, 0]
+    edges = [float(item.get("edge_cm") or 0) for item in cubes] or [0.0]
+    unit = "cm³（体积）" if preview.get("size_by") == "volume" else "cm（边长）"
+    chain = preview.get("chain") or []
+    if preview.get("link") and len(chain) > 2:
+        chain_text = "%s → … → %s（最大为最父级）" % (chain[0], chain[-1])
+    elif chain and preview.get("link"):
+        chain_text = " → ".join(chain)
+    else:
+        chain_text = "不建父子关系"
+    return ("%d 个立方体，%s %g~%g，边长 %g~%g cm；%s；间距 %g cm（%s）；seed=%s"
+            % (count, unit, bounds[0], bounds[1], min(edges), max(edges),
+               chain_text, preview.get("spacing", 0),
+               preview.get("spacing_mode", ""), preview.get("seed", "")))
+
+
 def format_result(payload: Dict[str, Any]) -> str:
     """把一次动作结果压成一行人话，供 UI 日志台显示。"""
     action = str(payload.get("action") or "?")
@@ -326,10 +430,21 @@ def format_result(payload: Dict[str, Any]) -> str:
             return "%s ✓ %s" % (action, json.dumps(brief, ensure_ascii=False))
         return "%s ✓ %s" % (action, str(result)[:160])
     if payload.get("status") == "dry_run":
+        preview = payload.get("preview") or {}
+        if preview.get("operation") == "CREATE_CUBE_CHAIN":
+            return "%s · 待确认：%s；点「执行」后一次撤销可全部回滚" % (
+                action, _cube_chain_summary(preview))
         return "%s · 待确认：%s" % (action, json.dumps(
-            payload.get("preview") or {}, ensure_ascii=False)[:240])
+            preview, ensure_ascii=False)[:240])
+    result = payload.get("result") or {}
+    if isinstance(result, dict) and "created" in result and "chain" in result:
+        chain = result.get("chain") or []
+        brief = ("%s → … → %s" % (chain[0], chain[-1])) if len(chain) > 2 \
+            else (" → ".join(chain) or "未建父子链")
+        return "%s ✓ 已创建 %d 个立方体（%s）；一次撤销可全部回滚" % (
+            action, len(result.get("created") or []), brief)
     return "%s ✓ 已执行 %s" % (action, json.dumps(
-        payload.get("result") or {}, ensure_ascii=False)[:200])
+        result, ensure_ascii=False)[:200])
 
 
 __all__ = ["SYSTEM_PROMPT", "command", "format_result", "parse_local",

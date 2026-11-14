@@ -191,11 +191,11 @@ v0.6 的「对话式控制台」只是规则问答 + 候选计划预览器，既
 
 | 层 | 文件 | 职责 |
 |---|---|---|
-| 能力表 | `tak/core/scene_actions.py` | 18 个受限动作、参数 schema、两阶段确认、审计（零 DCC import） |
+| 能力表 | `tak/core/scene_actions.py` | 19 个受限动作（v0.8.0 加 `scene.create_cube_chain`）、参数 schema、两阶段确认、审计（零 DCC import） |
 | 自然语言 | `tak/core/ai/commands.py` | 有 key 走 function calling，没 key 走本地关键词解析 |
 | 宿主实现 | `tak/adapters/maya/scene_ops.py` | 真实 `maya.cmds`：查询 / 绑定逻辑 / 创建 / 改名 / 删除 / 撤销 |
 | 桥 | `tak/core/bridge.py` | `/bridge/actions`、`/bridge/act`、写开关、主线程切换 |
-| 外部接入 | `tak/mcp/server.py` | stdio JSON-RPC 2.0，21 个 MCP tools，普通 Python 即可跑 |
+| 外部接入 | `tak/mcp/server.py` | stdio JSON-RPC 2.0，22 个 MCP tools（v0.8.0 起），普通 Python 即可跑 |
 | 客户端启动器 | `scripts/tak_mcp_entry.py` | v0.7.2：import tak 之前自补 `PYTHONPATH` / `USERPROFILE` / `TAK_HOME`，`env` 被清空也能连桥 |
 | 配置修复 | `tak/mcp/install.py`、`scripts/install_mcp_config.py` | v0.7.2：诊断 / 备份 / 原子写 / 复检，只改 `tak-scene` 一条 |
 
@@ -203,7 +203,9 @@ v0.6 的「对话式控制台」只是规则问答 + 候选计划预览器，既
 
 > v0.7.2 实测：客户端 UI 删除并重新 Trust `tak-scene` 时，会把 v0.7.0 的旧配置（`command` = `maya.exe`）写回 `mcp.json`，于是又报 `initialize timed out`。`--check` 能只读体检，`--minimal-env` 自检能验证「`env` 整段丢掉」仍可握手，详见 [MCP 文档](mcp.md)。
 
-配置与完整工具表见 **[MCP 文档](mcp.md)**。Maya 2026 standalone 真机探针 `validation/maya_scene_actions_probe.py` 覆盖 18 个动作、撤销、桥与 MCP 真实创建节点，结果 `ok=true`。
+> v0.8.0：**AI 端点的 function calling 之前一直没真正生效**——`parse_with_model()` 把 MCP `tools/list` 的 `{name, inputSchema}` 结构发给了 `chat/completions`，DeepSeek 回 `HTTP 422: tools[0]: missing field 'type'`，于是静默降级本地解析。现在 `openai_tools()` 转成 `{"type":"function","function":{...,"parameters"}}`。同时新增批量动作 `scene.create_cube_chain`：一句话建 N 个随机尺寸立方体并按体积降序连父子链，`seed` 是参数所以预览与执行一致，一次确认、一次撤销；MCP 工具数 21→22。
+
+配置与完整工具表见 **[MCP 文档](mcp.md)**。Maya 2026 standalone 真机探针 `validation/maya_scene_actions_probe.py` 覆盖当时的 18 个动作、撤销、桥与 MCP 真实创建节点，结果 `ok=true`；v0.8.0 批量动作另由 `validation/maya_cube_chain_probe.py` 覆盖（26 步 `ok=true`）。
 
 ## 9. 文档的维护约定
 

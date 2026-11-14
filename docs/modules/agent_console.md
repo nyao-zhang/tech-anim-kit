@@ -2,7 +2,7 @@
 
 > 用一句中文查当前场景、骨架与蒙皮，或创建、改名、删除节点；写操作先出 dry-run 预览，你点「执行」才落地。同一套动作经 MCP 暴露给外部 AI。旧的规则问答与候选计划仍然保留。
 
-**适用版本** TAK `0.7.2`　·　**DCC** maya / max / mobu / unreal（真实宿主动作目前只有 Maya）　·　**权限** `scene.read` / `node.write`　·　**UI** `both`
+**适用版本** TAK `0.8.0`　·　**DCC** maya / max / mobu / unreal（真实宿主动作目前只有 Maya）　·　**权限** `scene.read` / `node.write`　·　**UI** `both`
 
 ## 1. 它解决什么问题
 
@@ -230,7 +230,7 @@ confirm(confirm=True, dry_run=False, granted=[...])  -> ok=true   status=committ
 ```text
 自然语言 / MCP tools/call
   -> tak.core.ai.commands.resolve()     有 key 走 function calling，失败降级本地关键词
-  -> tak.core.scene_actions.REGISTRY   18 个动作白名单 + 参数 schema 校验
+  -> tak.core.scene_actions.REGISTRY   19 个动作白名单 + 参数 schema 校验
   -> 写操作：dry-run 预览 + 一次性 confirm_token（绑定动作与参数）
   -> 人工点「执行」/ 带 token 二次调用
   -> 权限 granted + undo chunk
@@ -244,6 +244,29 @@ confirm(confirm=True, dry_run=False, granted=[...])  -> ok=true   status=committ
 3. 写操作两阶段且 token 一次性；`bridge.allow_write` 默认关，是外部调用的总闸。`undo` 只在「TAK 写入后没有其它宿主操作」时生效，避免误撤用户自己的改动。
 
 `tools/agent_console/core.py` 里的 `command` / `actions` / `undo` 只是薄封装；同一张注册表同时被桥的 `/bridge/act` 和 MCP server 使用，所以面板、HTTP、MCP 三处看到的动作清单与安全边界完全一致。
+
+### 5.8 批量需求与 AI 端点（v0.8.0）
+
+之前输入「创建十个随机大小在10~100立方厘米的正方块，以大小体积做父子关系，最大的作为最父级」，日志会同时报 `HTTP 422: tools[0]: missing field 'type'` 和「创建需要给出名字」。两个原因：
+
+1. `parse_with_model()` 错把 MCP `tools/list` 的 `{name, description, inputSchema}` 发给 `chat/completions`，OpenAI / DeepSeek 要的是 `{"type":"function","function":{...,"parameters"}}`，于是模型通道每次都降级；
+2. 本地解析只认「创建一个 X 叫 Y」，没有批量语义。
+
+现在两条通道都能落到同一个动作 `scene.create_cube_chain`：
+
+```text
+你：创建十个随机大小在10~100立方厘米的正方块，按体积做父子，最大的作为最父级
+助手：scene.create_cube_chain · 待确认：10 个立方体，cm³（体积）10~100，
+      边长 2.21~4.60 cm；takCube_01 → … → takCube_10（最大为最父级）；
+      间距 7.35 cm（auto）；seed=…；点「执行」后一次撤销可全部回滚
+```
+
+要点：
+
+- 勾「允许写入」并点「执行」后，Maya 里才真的出现 10 个立方体；默认自动沿 X 排开，否则同心方块会被最大的包住看不见。
+- `seed` 是参数的一部分，预览里展示的尺寸、名字、层级与二次提交执行的**逐字段相同**，不会偷偷重新随机。
+- 「立方厘米 / 体积」按体积 cm³ 解释（边长取立方根）；只说「厘米 / 大小」按边长解释。预览里会写明用了哪种，可用 `size_by=edge` 改。
+- **重启 Maya 才能生效**：面板和桥跑在 DCC 进程里，Python 模块不会热更新；重启前 MCP `tools/list` 会返回 `capabilities_stale=true`。
 
 ## 6. 典型用法
 

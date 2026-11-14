@@ -6,6 +6,7 @@ import io
 import json
 import os
 
+from tak.core import scene_actions as sa
 from tak.mcp import config_snippet, handle, serve
 from tak.mcp import server as mcp
 
@@ -261,3 +262,34 @@ def test_mcp_layer_has_no_dcc_imports():
     for forbidden in ("import maya", "from maya", "pymxs", "pyfbsdk"):
         assert forbidden not in source
     assert os.path.isfile(mcp.__file__)
+
+
+def test_tools_list_flags_stale_bridge_capabilities(monkeypatch):
+    """DCC 没重启时桥上报的是旧能力表；tools/list 必须把差异说清楚。
+
+    v0.8.0 加 scene.create_cube_chain 后，用户当前 Maya GUI 里的桥仍是
+    v0.7.2 的 18 个动作，工具数不会自己变成 22。
+    """
+    stale = [tool for tool in sa.REGISTRY.mcp_tools()
+             if tool["name"] != "tak_scene_create_cube_chain"]
+    monkeypatch.setattr(mcp.tak_bridge, "bridge_status",
+                        lambda: {"running": True, "allow_write": False})
+    monkeypatch.setattr(mcp.tak_bridge, "call",
+                        lambda *a, **k: {"ok": True, "mcp_tools": stale})
+    payload = rpc("tools/list")["result"]
+    assert payload["bridge_running"] is True
+    assert payload["capabilities_stale"] is True
+    assert "tak_scene_create_cube_chain" in payload["stale_hint"]
+    assert "重启" in payload["stale_hint"]
+
+
+def test_tools_list_not_stale_when_bridge_is_current(monkeypatch):
+    current = sa.REGISTRY.mcp_tools()
+    monkeypatch.setattr(mcp.tak_bridge, "bridge_status",
+                        lambda: {"running": True, "allow_write": False})
+    monkeypatch.setattr(mcp.tak_bridge, "call",
+                        lambda *a, **k: {"ok": True, "mcp_tools": current})
+    payload = rpc("tools/list")["result"]
+    assert payload["capabilities_stale"] is False
+    assert payload["stale_hint"] == ""
+    assert len(payload["tools"]) == len(sa.REGISTRY.mcp_tools()) + len(mcp._META_TOOLS)

@@ -1,0 +1,568 @@
+{
+  "ok": true,
+  "dcc": "maya",
+  "tak_home": "C:\\Users\\NYAO\\AppData\\Local\\Temp\\tak_cube_chain_probe_f1lu47vg",
+  "steps": [
+    {
+      "name": "adapter_registered",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "natural_language_parse",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "calls": [
+          {
+            "action": "scene.create_cube_chain",
+            "params": {
+              "count": 10,
+              "min_size": 10.0,
+              "max_size": 100.0,
+              "size_by": "volume",
+              "link": true,
+              "prefix": "takCube",
+              "seed": 591367478
+            },
+            "confirm_token": ""
+          }
+        ],
+        "mode": "local",
+        "hint": "未配置 AI 端点或端点不可用，已使用本地关键词解析。可识别：查场景概况 / 帧范围 / 列出节点 / 找节点 / 当前选择 / 骨架层级 / 蒙皮信息 / 节点连接 / 创建 locator·joint·group·cube / 重命名 / 删除 / 设属性 / 批量创建随机大小立方体并按体积排父子链。想要任意说法请在「AI 连接」里配好端点。",
+        "reply": ""
+      }
+    },
+    {
+      "name": "parsed_action",
+      "ok": true,
+      "value": "scene.create_cube_chain"
+    },
+    {
+      "name": "dry_run",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "scene.create_cube_chain",
+        "read_only": false,
+        "status": "dry_run",
+        "dry_run": true,
+        "committed": false,
+        "preview": {
+          "operation": "CREATE_CUBE_CHAIN",
+          "count": 10,
+          "size_by": "volume",
+          "unit": "cm",
+          "range": [
+            10.0,
+            100.0
+          ],
+          "seed": 591367478,
+          "prefix": "takCube",
+          "link": true,
+          "spacing": 7.353134,
+          "spacing_mode": "auto",
+          "spacing_input": -1.0,
+          "interpretation": "按体积 cm³ 解释 10~100，边长 = 体积^(1/3) cm；若想按边长解释请设 size_by=edge",
+          "root": "takCube_01",
+          "chain": [
+            "takCube_01",
+            "takCube_02",
+            "takCube_03",
+            "takCube_04",
+            "takCube_05",
+            "takCube_06",
+            "takCube_07",
+            "takCube_08",
+            "takCube_09",
+            "takCube_10"
+          ],
+          "cubes": [
+            {
+              "volume_cm3": 97.063831,
+              "edge_cm": 4.595709,
+              "sample": 97.063831,
+              "name": "takCube_01",
+              "parent": ""
+            },
+            {
+              "volume_cm3": 64.494546,
+              "edge_cm": 4.010277,
+              "sample": 64.494546,
+              "name": "takCube_02",
+              "parent": "takCube_01"
+            },
+            {
+              "volume_cm3": 63.040156,
+              "edge_cm": 3.979902,
+              "sample": 63.040156,
+              "name": "takCube_03",
+              "parent": "takCube_02"
+            },
+            {
+              "volume_cm3": 62.475597,
+              "edge_cm": 3.967986,
+              "sample": 62.475597,
+              "name": "takCube_04",
+              "parent": "takCube_03"
+            },
+            {
+              "volume_cm3": 46.54518,
+              "edge_cm": 3.597147,
+              "sample": 46.54518,
+              "name": "takCube_05",
+              "parent": "takCube_04"
+            },
+            {
+              "volume_cm3": 44.756386,
+              "edge_cm": 3.550463,
+              "sample": 44.756386,
+              "name": "takCube_06",
+              "parent": "takCube_05"
+            },
+            {
+              "volume_cm3": 25.091376,
+              "edge_cm": 2.927576,
+              "sample": 25.091376,
+              "name": "takCube_07",
+              "parent": "takCube_06"
+            },
+            {
+              "volume_cm3": 25.005051,
+              "edge_cm": 2.924215,
+              "sample": 25.005051,
+              "name": "takCube_08",
+              "parent": "takCube_07"
+            },
+            {
+              "volume_cm3": 17.78503,
+              "edge_cm": 2.610267,
+              "sample": 17.78503,
+              "name": "takCube_09",
+              "parent": "takCube_08"
+            },
+            {
+              "volume_cm3": 10.749849,
+              "edge_cm": 2.206992,
+              "sample": 10.749849,
+              "name": "takCube_10",
+              "parent": "takCube_09"
+            }
+          ],
+          "effect": "场景新增 10 个多边形立方体并连成按体积降序的父子链（最大为最父级）；间距 7.35313 cm（auto）；一次 scene.undo_tak 可全部撤销"
+        },
+        "confirm_token": "DpTQI2ehlrNsywWtIP2Yzs9q",
+        "required_permissions": [
+          "node.write"
+        ],
+        "hint": "确认无误后再次调用：confirm=True, dry_run=False, confirm_token=该值（token 绑定动作与参数，改参数需重新预览）"
+      }
+    },
+    {
+      "name": "preview_is_dry_run",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "preview_count_10",
+      "ok": true,
+      "value": 10
+    },
+    {
+      "name": "preview_volume_mode",
+      "ok": true,
+      "value": "volume"
+    },
+    {
+      "name": "preview_link",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "preview_spacing_auto",
+      "ok": true,
+      "value": 7.353134
+    },
+    {
+      "name": "scene_clean_before",
+      "ok": true,
+      "value": []
+    },
+    {
+      "name": "commit",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "scene.create_cube_chain",
+        "read_only": false,
+        "status": "committed",
+        "dry_run": false,
+        "committed": true,
+        "result": {
+          "created": [
+            "takCube_01",
+            "takCube_02",
+            "takCube_03",
+            "takCube_04",
+            "takCube_05",
+            "takCube_06",
+            "takCube_07",
+            "takCube_08",
+            "takCube_09",
+            "takCube_10"
+          ],
+          "root": "takCube_01",
+          "chain": [
+            "takCube_01",
+            "takCube_02",
+            "takCube_03",
+            "takCube_04",
+            "takCube_05",
+            "takCube_06",
+            "takCube_07",
+            "takCube_08",
+            "takCube_09",
+            "takCube_10"
+          ],
+          "count": 10,
+          "size_by": "volume",
+          "seed": 591367478,
+          "unit": "cm",
+          "parent_of": {
+            "takCube_01": "<world>",
+            "takCube_02": "takCube_01",
+            "takCube_03": "takCube_02",
+            "takCube_04": "takCube_03",
+            "takCube_05": "takCube_04",
+            "takCube_06": "takCube_05",
+            "takCube_07": "takCube_06",
+            "takCube_08": "takCube_07",
+            "takCube_09": "takCube_08",
+            "takCube_10": "takCube_09"
+          }
+        },
+        "preview": {
+          "operation": "CREATE_CUBE_CHAIN",
+          "count": 10,
+          "size_by": "volume",
+          "unit": "cm",
+          "range": [
+            10.0,
+            100.0
+          ],
+          "seed": 591367478,
+          "prefix": "takCube",
+          "link": true,
+          "spacing": 7.353134,
+          "spacing_mode": "auto",
+          "spacing_input": -1.0,
+          "interpretation": "按体积 cm³ 解释 10~100，边长 = 体积^(1/3) cm；若想按边长解释请设 size_by=edge",
+          "root": "takCube_01",
+          "chain": [
+            "takCube_01",
+            "takCube_02",
+            "takCube_03",
+            "takCube_04",
+            "takCube_05",
+            "takCube_06",
+            "takCube_07",
+            "takCube_08",
+            "takCube_09",
+            "takCube_10"
+          ],
+          "cubes": [
+            {
+              "volume_cm3": 97.063831,
+              "edge_cm": 4.595709,
+              "sample": 97.063831,
+              "name": "takCube_01",
+              "parent": ""
+            },
+            {
+              "volume_cm3": 64.494546,
+              "edge_cm": 4.010277,
+              "sample": 64.494546,
+              "name": "takCube_02",
+              "parent": "takCube_01"
+            },
+            {
+              "volume_cm3": 63.040156,
+              "edge_cm": 3.979902,
+              "sample": 63.040156,
+              "name": "takCube_03",
+              "parent": "takCube_02"
+            },
+            {
+              "volume_cm3": 62.475597,
+              "edge_cm": 3.967986,
+              "sample": 62.475597,
+              "name": "takCube_04",
+              "parent": "takCube_03"
+            },
+            {
+              "volume_cm3": 46.54518,
+              "edge_cm": 3.597147,
+              "sample": 46.54518,
+              "name": "takCube_05",
+              "parent": "takCube_04"
+            },
+            {
+              "volume_cm3": 44.756386,
+              "edge_cm": 3.550463,
+              "sample": 44.756386,
+              "name": "takCube_06",
+              "parent": "takCube_05"
+            },
+            {
+              "volume_cm3": 25.091376,
+              "edge_cm": 2.927576,
+              "sample": 25.091376,
+              "name": "takCube_07",
+              "parent": "takCube_06"
+            },
+            {
+              "volume_cm3": 25.005051,
+              "edge_cm": 2.924215,
+              "sample": 25.005051,
+              "name": "takCube_08",
+              "parent": "takCube_07"
+            },
+            {
+              "volume_cm3": 17.78503,
+              "edge_cm": 2.610267,
+              "sample": 17.78503,
+              "name": "takCube_09",
+              "parent": "takCube_08"
+            },
+            {
+              "volume_cm3": 10.749849,
+              "edge_cm": 2.206992,
+              "sample": 10.749849,
+              "name": "takCube_10",
+              "parent": "takCube_09"
+            }
+          ],
+          "effect": "场景新增 10 个多边形立方体并连成按体积降序的父子链（最大为最父级）；间距 7.35313 cm（auto）；一次 scene.undo_tak 可全部撤销"
+        },
+        "confirm_token": "DpTQI2ehlrNsywWtIP2Yzs9q"
+      }
+    },
+    {
+      "name": "status_committed",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "result_matches_preview",
+      "ok": true,
+      "value": {
+        "result_keys": [
+          "chain",
+          "count",
+          "created",
+          "parent_of",
+          "root",
+          "seed",
+          "size_by",
+          "unit"
+        ],
+        "preview_equal": true
+      }
+    },
+    {
+      "name": "all_nodes_exist",
+      "ok": true,
+      "value": []
+    },
+    {
+      "name": "all_are_transforms",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "edge_lengths_match_preview",
+      "ok": true,
+      "value": {
+        "actual": [
+          4.595709,
+          4.010277,
+          3.979902,
+          3.967986,
+          3.597147,
+          3.550463,
+          2.927576,
+          2.924215,
+          2.610267,
+          2.206992
+        ],
+        "expected": [
+          4.595709,
+          4.010277,
+          3.979902,
+          3.967986,
+          3.597147,
+          3.550463,
+          2.927576,
+          2.924215,
+          2.610267,
+          2.206992
+        ]
+      }
+    },
+    {
+      "name": "volumes_descending",
+      "ok": true,
+      "value": [
+        97.063861335989,
+        64.49456448617114,
+        63.04013503707082,
+        62.47559394332517,
+        46.5451632445549,
+        44.75638215562911,
+        25.091379241028164,
+        25.00506003501563,
+        17.7850380503119,
+        10.749846843047745
+      ]
+    },
+    {
+      "name": "volume_range_10_100",
+      "ok": true,
+      "value": [
+        97.064,
+        64.495,
+        63.04,
+        62.476,
+        46.545,
+        44.756,
+        25.091,
+        25.005,
+        17.785,
+        10.75
+      ]
+    },
+    {
+      "name": "parent_chain_by_volume",
+      "ok": true,
+      "value": {
+        "actual": [
+          "",
+          "takCube_01",
+          "takCube_02",
+          "takCube_03",
+          "takCube_04",
+          "takCube_05",
+          "takCube_06",
+          "takCube_07",
+          "takCube_08",
+          "takCube_09"
+        ],
+        "expected": [
+          "",
+          "takCube_01",
+          "takCube_02",
+          "takCube_03",
+          "takCube_04",
+          "takCube_05",
+          "takCube_06",
+          "takCube_07",
+          "takCube_08",
+          "takCube_09"
+        ]
+      }
+    },
+    {
+      "name": "root_is_world_child",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "spacing_applied",
+      "ok": true,
+      "value": [
+        7.353134,
+        7.353134,
+        7.353134,
+        7.353134,
+        7.353134,
+        7.353134,
+        7.353134,
+        7.353134,
+        7.353134
+      ]
+    },
+    {
+      "name": "undo_last",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "undone": "scene.create_cube_chain"
+      }
+    },
+    {
+      "name": "undo_ok",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "undone": "scene.create_cube_chain"
+      }
+    },
+    {
+      "name": "all_nodes_gone_after_undo",
+      "ok": true,
+      "value": []
+    },
+    {
+      "name": "handler_rejects_name_clash",
+      "ok": true,
+      "value": "节点 takCube_01 已存在，换一个 prefix 再试；本次不创建任何节点"
+    },
+    {
+      "name": "no_partial_creation",
+      "ok": true,
+      "value": []
+    }
+  ],
+  "errors": [],
+  "plan_summary": {
+    "seed": 591367478,
+    "root": "takCube_01",
+    "chain": [
+      "takCube_01",
+      "takCube_02",
+      "takCube_03",
+      "takCube_04",
+      "takCube_05",
+      "takCube_06",
+      "takCube_07",
+      "takCube_08",
+      "takCube_09",
+      "takCube_10"
+    ],
+    "spacing": 7.353134,
+    "volumes_cm3": [
+      97.064,
+      64.495,
+      63.04,
+      62.476,
+      46.545,
+      44.756,
+      25.091,
+      25.005,
+      17.785,
+      10.75
+    ],
+    "edges_cm": [
+      4.595709,
+      4.010277,
+      3.979902,
+      3.967986,
+      3.597147,
+      3.550463,
+      2.927576,
+      2.924215,
+      2.610267,
+      2.206992
+    ]
+  }
+}

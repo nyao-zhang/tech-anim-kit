@@ -420,6 +420,58 @@ def node_create(params: Dict[str, Any]) -> Dict[str, Any]:
             "full_path": (c.ls(created, long=True) or [created])[0]}
 
 
+def cube_chain_create(params: Dict[str, Any]) -> Dict[str, Any]:
+    """一次建 N 个 polyCube + 体积降序父子链。
+
+    尺寸、名字、层级**完全复用** core 的 :func:`cube_chain_plan`，不在宿主里
+    重新随机 —— 否则 dry-run 给人看的 diff 和实际建出来的东西会对不上。
+    整体查重放在创建之前，任何一个名字被占用就整体失败（由 core 的 undo
+    chunk 保证不留半成品）。
+    """
+    c = _c()
+    plan = sa.cube_chain_plan(params)
+    cubes = plan["cubes"]
+    for item in cubes:
+        name = _check_name(str(item["name"]))
+        if c.objExists(name):
+            raise ValueError("节点 %s 已存在，换一个 prefix 再试；本次不创建任何节点"
+                             % name)
+
+    created: List[str] = []
+    for item in cubes:
+        edge = float(item["edge_cm"])
+        transform = str(c.polyCube(name=item["name"], width=edge,
+                                   height=edge, depth=edge)[0])
+        # Maya 在重名或命名空间情况下会自动加后缀；统一改回预览里的名字。
+        if transform != item["name"]:
+            transform = str(c.rename(transform, item["name"]))
+        created.append(transform)
+
+    if plan["link"]:
+        for index in range(1, len(cubes)):
+            child = str(cubes[index]["name"])
+            parent = str(cubes[index - 1]["name"])
+            c.parent(child, parent)
+            if plan["spacing"] > 0:
+                c.setAttr(child + ".translateX", float(plan["spacing"]))
+    elif plan["spacing"] > 0:
+        for index, item in enumerate(cubes):
+            c.setAttr(str(item["name"]) + ".translateX",
+                      float(plan["spacing"]) * index)
+
+    return {
+        "created": created,
+        "root": plan["root"],
+        "chain": plan["chain"] if plan["link"] else [],
+        "count": len(created),
+        "size_by": plan["size_by"],
+        "seed": plan["seed"],
+        "unit": plan["unit"],
+        "parent_of": {str(item["name"]): (item["parent"] or "<world>")
+                      for item in cubes},
+    }
+
+
 def node_rename(params: Dict[str, Any]) -> Dict[str, Any]:
     c = _c()
     node = _exists(str(params.get("node") or ""))
@@ -600,6 +652,7 @@ _HANDLERS = {
     "rig.influences": rig_influences,
     "rig.connections": rig_connections,
     "node.create": node_create,
+    "scene.create_cube_chain": cube_chain_create,
     "node.rename": node_rename,
     "node.delete": node_delete,
     "node.parent": node_parent,
@@ -608,6 +661,8 @@ _HANDLERS = {
     "scene.undo_tak": scene_undo_tak,
 }
 
+# scene.create_cube_chain 故意不在这里：它的预览是 core 的纯计算
+# cube_chain_plan()，MCP / Web 进程里没有 Maya 也要能 dry-run。
 _PREVIEWS = {
     "node.create": _preview_create,
     "node.rename": _preview_generic("RENAME"),

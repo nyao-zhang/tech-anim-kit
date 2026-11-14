@@ -54,7 +54,13 @@ def test_model_function_calling_and_control_field_stripping(monkeypatch):
     class FakeClient:
         def chat_tools(self, messages, tools, **kwargs):
             assert messages[0]["role"] == "system"
-            assert any(tool["name"] == "tak_scene_get_node" for tool in tools)
+            # v0.8.0：必须是 OpenAI function calling 格式，不能再用 MCP tools/list
+            # 的 {name, inputSchema}，否则 DeepSeek 回 422 missing field `type`。
+            assert all(tool["type"] == "function" for tool in tools)
+            assert any(tool["function"]["name"] == "tak_scene_get_node"
+                       for tool in tools)
+            assert all(tool["function"]["parameters"]["type"] == "object"
+                       for tool in tools)
             return {"content": "", "tool_calls": [
                 {"function": {
                     "name": "tak_node_create",

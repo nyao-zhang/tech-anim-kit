@@ -2,7 +2,9 @@
 
 跨 DCC 技术动画工具集，面向 **Maya 2023+ / 3ds Max 2023+ / MotionBuilder 2023+ / Unreal Engine 5.8–5.9**。
 
-> 当前版本 `0.7.2`（**MCP 配置不会再被旧片段搞坏**：自包含启动器 + 一键修复）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
+> 当前版本 `0.8.0`（**一句话建出十个按体积排父子的立方体**：修好 AI 端点 422，补上批量动作）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
+>
+> v0.8.0 修两个卡住真实需求的问题：① 面板里的 function calling 把 MCP 的 `tools/list` 格式直接发给 DeepSeek，报 `HTTP 422: tools[0]: missing field 'type'`，于是每次都降级到本地关键词解析；② 本地解析只认「创建一个 X 叫 Y」，碰到「创建十个随机大小在 10~100 立方厘米的正方块，以大小体积做父子关系，最大的作为最父级」只会回「创建需要给出名字」。现在 tools 转成 OpenAI `type=function` 格式（真机 1.5 秒返回、模型直接选中新动作），并新增受限动作 `scene.create_cube_chain`：一次调用、一次确认、一次撤销，随机 seed 是参数所以预览与执行完全一致，默认自动排开避免同心重叠。MCP 工具 21 → 22 个，动作 18 → 19 个。
 >
 > v0.7.2 修「改好了又超时」：在客户端 UI 里删除并重新 Trust `tak-scene` 时，表单会把 v0.7.0 的旧配置（`command` = `maya.exe`）写回 `~/.workbuddy/mcp.json`，客户端去启动 Maya GUI，30 秒收不到 `initialize`。现在配置片段指向 `scripts/tak_mcp_entry.py`——它在 import tak 之前自补 `PYTHONPATH` / `USERPROFILE` / `TAK_HOME`，**`env` 整段删掉也能连上桥**；并提供 `python scripts/install_mcp_config.py` 与面板「修复 MCP」按钮，自动备份 + 修 + 复检。
 >
@@ -109,7 +111,7 @@ python validation/run_probe.py --script ue_adapter_probe.py
 | 导出 / 导入 `asset_pipeline` | 管线 / 绑定 | 选内容（完整绑定 / 仅骨骼 / 仅蒙皮 / 动画缓存 / 仅控制器）与目标（Maya / Max / MoBu / UE / 通用），导到文件或跨 DCC 缓存位，另一侧用同一 profile 做导入校验 | [asset_pipeline](docs/modules/asset_pipeline.md) |
 | ML Deformer `mldeformer_factory` | AI / 绑定 | 姿态采样计划 + 内容寻址数据集 + 五项质量门槛；训练交给 UE 的 ML Deformer 训练器 | [mldeformer_factory](docs/modules/mldeformer_factory.md) |
 | VLM 缺陷检查 `defect_inspector` | AI / 动画 | 抽帧图片序列 → 视觉模型给候选 → 确定性过滤 → 帧号 / 类别 / 骨骼 / 置信度清单 | [defect_inspector](docs/modules/defect_inspector.md) |
-| 对话控制台 `agent_console` | AI / 通用 | 一句话查当前场景 / 骨架 / 蒙皮，或创建、改名、删除节点；18 个受限动作 + dry-run 预览 + 人工确认 + undo；同一套动作经 MCP 暴露给外部 AI | [agent_console](docs/modules/agent_console.md) |
+| 对话控制台 `agent_console` | AI / 通用 | 一句话查当前场景 / 骨架 / 蒙皮，或创建、改名、删除节点；19 个受限动作（含批量立方体链）+ dry-run 预览 + 人工确认 + undo；同一套动作经 MCP 暴露给外部 AI | [agent_console](docs/modules/agent_console.md) |
 
 另有两个内置界面：**设置**（分类增删改、工具归类、第三方插件导入、配置目录）与**关于**。两者都在菜单里，也在面板左下角。
 
@@ -150,7 +152,7 @@ Maya 下共 **37 个检查项**（19 条内置规范 + 18 条来自规则提供�
 | `tak/install/` | 一条命令安装器：四端探测、标记块幂等写入、备份、精确卸载、CLI |
 | `tak/compat/` | PySide2→PySide6 兼容层、UE API 降级探测 |
 | `tak/ui/` | 设计 token、`theme.qss`/`theme_light.qss`/`theme.css`、`qt/`（主面板 / 详情面板 / 设置面板）、`web/` 只读报告看板 |
-| `tak/core/scene_actions.py` | 18 个受限场景动作的白名单、参数校验、两阶段确认与审计（零 DCC import） |
+| `tak/core/scene_actions.py` | 19 个受限场景动作的白名单、参数校验、两阶段确认与审计（零 DCC import） |
 | `tak/mcp/` | stdio JSON-RPC 2.0 MCP server，把场景动作暴露给外部 AI |
 | `tak/adapters/maya/scene_ops.py` | Maya 真实宿主实现：查询 / 绑定逻辑 / 创建 / 修改 / 撤销 |
 | `tools/` | 10 个插件（5 个工具 + 5 个内部规则提供者）+ `_template/` + `new_tool.py` |
@@ -219,13 +221,13 @@ TAK_AI_BASE_URL=https://api.deepseek.com    # 任何 OpenAI 兼容端点
 ```bash
 python -m tak.mcp --print-config     # 生成配置片段
 python -m tak.mcp --status           # 看桥有没有开
-python -m tak.core.bridge actions    # 列出 18 个动作
+python -m tak.core.bridge actions    # 列出 19 个动作
 python -m tak.core.bridge act scene.summary '{}'
 ```
 
 不配 AI 端点也能用：本地关键词解析覆盖高频句式；配了端点走 OpenAI 兼容 function calling，任意说法都能理解（12 秒超时自动降级）。完整工具表、两阶段写入示例、安全边界与排错见 **[docs/mcp.md](docs/mcp.md)**。
 
-真机验证：`validation/maya_scene_actions_probe.py` 在 Maya 2026 standalone 跑过 18 个动作、撤销、桥与 MCP 真实创建节点，`ok=true`（63 步）。
+真机验证：`validation/maya_scene_actions_probe.py` 在 Maya 2026 standalone 跑过当时的 18 个动作、撤销、桥与 MCP 真实创建节点，`ok=true`（63 步）；v0.8.0 新增的批量动作由 `validation/maya_cube_chain_probe.py` 单独覆盖，`ok=true`（26 步）。
 
 ## AI 工作台
 

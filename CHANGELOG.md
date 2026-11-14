@@ -13,6 +13,56 @@
 
 （无）
 
+## [0.8.0] - 2026-11-14
+
+一句话：**修好 AI 端点的 422，并让「创建十个随机大小立方体、按体积做父子」这种复合需求真的能一次做完。**
+
+用户在面板里输入「创建十个随机大小在10~100立方厘米的正方块，以大小体积做父子关系，最大的作为最父级」，日志是：
+
+```text
+[WARN] AI 端点不可用，已用本地解析：AIClientError: HTTP 422:
+       {"error":{"message":"Failed to deserialize the JSON body into the target
+        type: tools[0]: missing field `type` ..."}}
+[INFO] 助手：没能解析出可执行的场景动作。
+[WARN] 提示：创建需要给出名字，例如「创建一个 locator 叫 foot_ctrl」
+```
+
+两个独立原因叠在一起：**模型通道被 422 掐断**，**本地通道没有批量语义**。
+
+### Fixed
+
+- **function calling 的 tools 格式错了**（`tak/core/ai/commands.py`、`tak/core/scene_actions.py`）。`parse_with_model()` 把 `REGISTRY.mcp_tools()` 的 MCP `tools/list` 结构（`{name, description, inputSchema}`）原样塞进 `chat/completions`，而 OpenAI / DeepSeek 要求 `{"type":"function","function":{"name","description","parameters"}}`。少了 `type` 直接 422，每次都静默降级本地解析。新增 `SceneActionRegistry.openai_tools()` 做格式转换；MCP 侧仍用 `mcp_tools()`，两种格式不再混用。
+- **本地解析遇到批量需求只会要名字**（`tak/core/ai/commands.py`）。新增 `_cube_chain_call()`：识别中文/阿拉伯数量词、数值范围、「立方厘米 vs 厘米」单位、父子/层级关键词，映射到一个批量动作；不传 spacing 时走动作的默认自动排开。
+
+### Added
+
+- **受限动作 `scene.create_cube_chain`**（`tak/core/scene_actions.py`）：`count` / `min_size` / `max_size` / `size_by` / `seed` / `prefix` / `link` / `spacing` 八个有界参数。纯函数 `cube_chain_plan()` 生成尺寸、名字、体积降序父子链；`seed` 是参数的一部分，因此 dry-run 展示的东西与带 `confirm_token` 第二次执行的东西**逐字段相同**，不在宿主里偷偷重新随机。`size_by=volume`（默认，按 cm³ 解释，边长取立方根）或 `edge`（按 cm 解释）把用户那句「10~100 立方厘米」的歧义明确写进预览。
+- **Maya 真实实现**（`tak/adapters/maya/scene_ops.py`）：`cmds.polyCube` 按 plan 的边长建 N 个 transform、按体积降序 `cmds.parent` 成链、按 spacing 设本地 `translateX`；创建前整体查重，任一名字被占用就整体失败不留半成品；整批包在一个 undo chunk 里，一次 `tak_undo` 全撤。
+- **默认自动排开**：同心且边长不同的立方体会被最大的完全包住，看起来像只建了一个。`spacing=-1`（默认）按最大边长 ×1.6 沿 X 轴逐级排开，`0` 才是真的重叠。
+- **面板可读摘要**（`format_result()`）：批量预览 JSON 很长，压成一句「10 个立方体，cm³ 10~100，边长 x~y cm；最大为最父级；间距 …；seed=…」。
+- **MCP 能力表过期提示**（`tak/mcp/server.py`）：桥跑在 DCC 进程里，DCC 没重启时上报的仍是启动那刻的旧能力表。`tools/list` 现在返回 `capabilities_stale` / `stale_hint`，直接说明「少了哪个动作、需要重启 DCC」，不用对着工具数没变猜。
+- **`validation/maya_cube_chain_probe.py`**：Maya 2026 mayapy 真机探针，26 步覆盖自然语言解析 → dry-run → 提交 → 反查 polyCube 真实边长 → 体积降序 → 父子链 → 间距 → 一次撤销 → 名字冲突无半成品。
+- **`tests/test_cube_chain.py`**：21 个用例覆盖 tools 格式、中英文数量/单位解析、预览确定性、token 篡改失效、假 cmds 下的 Maya handler、摘要格式；旧 `test_ai_commands.py` 的假客户端断言同步到新格式。
+
+### Changed
+
+- 动作 18 → **19** 个，MCP tools 21 → **22** 个（19 + 3 个元工具）。`describe_actions()` / `/bridge/actions` / `tools/list` 自动带上新动作，无需改桥或 MCP 的枚举。
+- `SYSTEM_PROMPT` 明确要求模型用批量动作而不是拆成 N 次写操作（每个写操作都要单独人工确认，拆开根本不可操作），并提示不要主动把 `spacing` 设成 0。
+
+### 验证记录
+
+- **真实 DeepSeek 端点**：`deepseek-v4-flash` 调 `parse_with_model()`，1.51 s 返回 `ok=true`、`mode=model`，模型直接选中 `tak_scene_create_cube_chain`，给出 `count=10 / size_by=volume / link=true / seed=2024`；修复前同样的请求是 HTTP 422。
+- **Maya 2026 mayapy 真机**：`validation/maya_cube_chain_probe_result.json` → `ok=true`、26 步无失败。10 个立方体边长 4.596→2.207 cm、体积 97.06→10.75 cm³ 严格降序，父子链 `takCube_01 → … → takCube_10`，自动间距 7.353 cm，撤销后 10 个节点全部消失。
+- **全量 `pytest`**：**1236 个用例通过**。
+- **MCP 握手**：桥在跑时 `initialize` 约 670 ms、`tak_status` 返回真实地址、`tak_scene_summary` 读到真实 Maya 场景；`tools/list` 如实报 `capabilities_stale=true`（因为当前 Maya GUI 还没重启）。
+
+### Known limitations
+
+- **必须重启 Maya（或至少重新加载 TAK）才能用上新动作**：桥与面板跑在 DCC 进程里，Python 模块不会热更新。重启前，面板仍是旧注册表，MCP `tools/list` 会返回 21 个工具并带 `capabilities_stale` 提示；重启后变 22 个。
+- 当前只有 Maya 实现了这个批量动作；Max / MoBu / UE 会明确报「未实现」。
+- 单位按 Maya 默认 cm 解释；若场景单位被改成 m，需要自己换算 `min_size` / `max_size`。
+- `mayapy standalone` 不覆盖真实 GUI 的 Qt 事件循环与主线程切换。
+
 ## [0.7.2] - 2026-11-14
 
 一句话：**修好「刚改对，重新 Trust 一次又超时」——配置被客户端 UI 回写成旧的 `maya.exe`，并让 server 不再依赖 `env`。**

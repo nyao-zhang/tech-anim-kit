@@ -101,6 +101,19 @@ def bridge_tools() -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
                 spec = sa.REGISTRY.get(action)
                 if spec is not None and not spec.read_only:
                     tools[index] = _with_confirm_fields(tool)
+            # 桥跑在 DCC 进程里，DCC 没重启时它上报的仍是启动那一刻加载的
+            # 旧能力表。此时新加的动作既不会出现在 tools/list，调用也会被桥
+            # 拒掉。别让人对着「工具数没变」猜，直接把差异说出来。
+            core_names = {tool["name"] for tool in sa.REGISTRY.mcp_tools()}
+            missing = sorted(core_names - {tool.get("name") for tool in tools})
+            if missing:
+                status = dict(status)
+                status["capabilities_stale"] = True
+                status["missing_actions"] = missing
+                status["stale_hint"] = (
+                    "桥所在的 DCC 仍在运行旧版 TAK（少了 %d 个动作：%s）。"
+                    "重启 DCC / 重新加载 TAK 后，桥才会上报新能力；在此之前"
+                    "这些工具不可调用。" % (len(missing), ", ".join(missing[:6])))
             return tools + list(_META_TOOLS), status
     static = []
     for tool in sa.REGISTRY.mcp_tools():
@@ -234,7 +247,9 @@ def handle(request: Any) -> Optional[Dict[str, Any]]:
         elif method == "tools/list":
             tools, status = bridge_tools()
             result = {"tools": tools, "bridge_running": bool(status.get("running")),
-                      "allow_write": bool(status.get("allow_write"))}
+                      "allow_write": bool(status.get("allow_write")),
+                      "capabilities_stale": bool(status.get("capabilities_stale")),
+                      "stale_hint": str(status.get("stale_hint") or "")}
         elif method == "tools/call":
             return _response(request_id, _handle_tools_call(params)) \
                 if not notification else None

@@ -33,6 +33,8 @@ from __future__ import annotations
 import copy
 import json
 import math
+import random
+import re
 import secrets
 import threading
 import time
@@ -234,6 +236,24 @@ class SceneActionRegistry:
         items = [spec.to_mcp_tool() for spec in self._specs.values()
                  if not dcc or not spec.dcc or spec.dcc == dcc]
         return sorted(items, key=lambda item: item["name"])
+
+    def openai_tools(self, dcc: str = "") -> List[Dict[str, Any]]:
+        """把 MCP 能力表转成 OpenAI / DeepSeek function calling 的 tools 格式。
+
+        **为什么要分开**：MCP ``tools/list`` 要的是
+        ``{"name", "description", "inputSchema"}``，而 ``chat/completions``
+        的 ``tools`` 要的是 ``{"type": "function", "function": {"name",
+        "description", "parameters"}}``。v0.7.x 直接把前者塞给模型，DeepSeek
+        回 ``HTTP 422: tools[0]: missing field `type` ``，于是每次都降级到
+        本地关键词解析，复杂一点的 demand 全变成「没能解析出可执行的动作」。
+        """
+        return [
+            {"type": "function",
+             "function": {"name": tool["name"],
+                          "description": tool["description"],
+                          "parameters": tool["inputSchema"]}}
+            for tool in self.mcp_tools(dcc)
+        ]
 
     def tool_to_action(self, mcp_name: str) -> str:
         prefix = "tak_"
@@ -472,6 +492,104 @@ def implement(name: str, handler: Callable[[Dict[str, Any]], Any],
 REGISTRY = SceneActionRegistry()
 
 # --------------------------------------------------------------------------- #
+# 批量资产：一次性建 N 个立方体并按体积排父子链
+# --------------------------------------------------------------------------- #
+#: 前缀只允许 Maya / Max 都能用的标识符，避免模型塞进路径或中文。
+_PREFIX_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,47}$")
+
+
+def cube_chain_plan(params: Dict[str, Any]) -> Dict[str, Any]:
+    """纯计算：把参数变成**确定**的立方体链计划（零 DCC import）。
+
+    ``seed`` 是动作参数的一部分，因此 dry-run 里展示的尺寸、名字、父子关系，
+    与带 ``confirm_token`` 第二次调用真正执行时**逐字节相同**。这是两阶段确认
+    能成立的前提：绝不能在 handler 里偷偷重新随机一次，否则「给你看的 diff」
+    和「实际建出来的东西」就不是一回事了。
+
+    Maya 默认单位是 cm；``size_by="volume"`` 时 10~100 指的是 cm³，边长取立方根
+    （约 2.15~4.64 cm）。用户若本意是边长 10~100 cm，把 ``size_by`` 改成
+    ``"edge"`` 即可，预览里会把这个歧义明确写出来。
+    """
+    count = int(params.get("count", 10))
+    if count < 1 or count > 50:
+        raise ActionError("count 必须在 1~50 之间")
+    low = float(params.get("min_size", 10))
+    high = float(params.get("max_size", 100))
+    if not (math.isfinite(low) and math.isfinite(high)) \
+            or low <= 0 or high <= 0 or low > high:
+        raise ActionError("min_size / max_size 必须是正数且 min_size <= max_size")
+    size_by = str(params.get("size_by") or "volume")
+    if size_by not in ("volume", "edge"):
+        raise ActionError("size_by 只能是 volume 或 edge")
+    prefix = str(params.get("prefix") or "takCube")
+    if not _PREFIX_RE.match(prefix):
+        raise ActionError("prefix 必须是 1~48 位的字母/数字/下划线且不以数字开头")
+    seed = int(params.get("seed", 0))
+    link = bool(params.get("link", True))
+    spacing_input = float(params.get("spacing", -1.0))
+    if not math.isfinite(spacing_input) or spacing_input < -1.0:
+        raise ActionError("spacing 必须是 -1（自动排开）或 >= 0 的有限数")
+
+    rng = random.Random(seed)
+    cubes: List[Dict[str, Any]] = []
+    for _ in range(count):
+        sample = rng.uniform(low, high)
+        if size_by == "volume":
+            volume, edge = sample, sample ** (1.0 / 3.0)
+        else:
+            edge, volume = sample, sample ** 3
+        cubes.append({"volume_cm3": round(volume, 6),
+                      "edge_cm": round(edge, 6),
+                      "sample": round(sample, 6)})
+    # 同心但边长不同的立方体会被最大的完全包住，用户会以为「只建了一个」。
+    # 默认按最大边长的 1.6 倍沿本地 X 轴逐级排开；显式给 0 才是真的重叠。
+    if spacing_input < 0:
+        max_edge = max(item["edge_cm"] for item in cubes)
+        spacing = round(max_edge * 1.6, 6)
+        spacing_mode = "auto"
+    else:
+        spacing = spacing_input
+        spacing_mode = "none" if spacing == 0 else "explicit"
+
+    # 体积降序 = 最大的做最父级
+    cubes.sort(key=lambda item: -item["volume_cm3"])
+    for index, item in enumerate(cubes):
+        item["name"] = "%s_%02d" % (prefix, index + 1)
+        item["parent"] = (cubes[index - 1]["name"] if link and index else "")
+    if not link:
+        for item in cubes:
+            item["parent"] = ""
+    return {
+        "operation": "CREATE_CUBE_CHAIN",
+        "count": count,
+        "size_by": size_by,
+        "unit": "cm",
+        "range": [low, high],
+        "seed": seed,
+        "prefix": prefix,
+        "link": link,
+        "spacing": spacing,
+        "spacing_mode": spacing_mode,
+        "spacing_input": spacing_input,
+        "interpretation": (
+            "按体积 cm³ 解释 %g~%g，边长 = 体积^(1/3) cm；若想按边长解释请设 size_by=edge"
+            % (low, high) if size_by == "volume"
+            else "按边长 cm 解释 %g~%g，体积 = 边长³ cm³" % (low, high)),
+        "root": cubes[0]["name"] if cubes else "",
+        "chain": [item["name"] for item in cubes],
+        "cubes": cubes,
+        "effect": ("场景新增 %d 个多边形立方体%s；间距 %g cm（%s）；"
+                   "一次 scene.undo_tak 可全部撤销"
+                   % (count, "并连成按体积降序的父子链（最大为最父级）" if link
+                      else "（不建父子关系）", spacing, spacing_mode)),
+    }
+
+
+def _preview_cube_chain(params: Dict[str, Any]) -> Dict[str, Any]:
+    return cube_chain_plan(params)
+
+
+# --------------------------------------------------------------------------- #
 # 能力表：core 层声明，adapter 层实现。分类覆盖用户点名的四类诉求：
 # 查询场景 / 查绑定逻辑 / 修改场景 / 创建资产。
 # --------------------------------------------------------------------------- #
@@ -543,6 +661,37 @@ declare("selection.set", "设置当前选择集",
         params={"nodes": ParamSpec("array", "节点名列表", items="string",
                                    required=True)},
         read_only=False, permissions=(WRITE_PERMISSION,), group="write")
+
+declare(
+    "scene.create_cube_chain",
+    "批量创建多个随机大小的多边形立方体，并按体积从大到小连成一条父子链"
+    "（最大的是最父级）；一次调用、一次确认、一次撤销即可完成。"
+    "适合『创建十个随机大小的方块，按体积做父子关系』这类复合需求，"
+    "不要拆成多次 node.create + node.parent（每个写操作都要单独人工确认）。",
+    params={
+        "count": ParamSpec("integer", "创建几个立方体（1~50）", default=10,
+                           minimum=1, maximum=50),
+        "min_size": ParamSpec("number", "尺寸下限", default=10,
+                              minimum=0.001, maximum=100000),
+        "max_size": ParamSpec("number", "尺寸上限", default=100,
+                              minimum=0.001, maximum=100000),
+        "size_by": ParamSpec(
+            "string", "volume=按体积 cm³（默认，边长=体积^(1/3)）；edge=按边长 cm",
+            default="volume", enum=("volume", "edge")),
+        "seed": ParamSpec("integer", "随机种子；相同 seed 的尺寸与层级完全一致",
+                          default=0, minimum=0, maximum=2147483647),
+        "prefix": ParamSpec("string", "命名前缀，实际名字为 prefix_01 …",
+                            default="takCube"),
+        "link": ParamSpec("boolean", "是否按体积降序连成父子链（最大为最父级）",
+                          default=True),
+        "spacing": ParamSpec(
+            "number", "父子间沿本地 X 轴的间距 cm；-1=自动（最大边长×1.6，推荐，"
+                      "避免同心重叠看不见）；0=全部在原点；>0=指定间距",
+            default=-1.0, minimum=-1.0, maximum=10000.0),
+    },
+    read_only=False, permissions=(WRITE_PERMISSION,), group="write",
+    previewer=_preview_cube_chain)
+
 declare("scene.undo_tak", "撤销最近一次由 TAK 执行的写操作",
         read_only=False, permissions=(WRITE_PERMISSION,), group="write",
         no_undo_chunk=True)
@@ -559,5 +708,5 @@ def describe_actions(dcc: str = "") -> Dict[str, Any]:
 __all__ = [
     "READ_PERMISSION", "WRITE_PERMISSION", "REGISTRY", "ActionError",
     "ActionNotImplemented", "ActionSpec", "ParamSpec", "SceneActionRegistry",
-    "declare", "implement", "describe_actions",
+    "declare", "implement", "describe_actions", "cube_chain_plan",
 ]
