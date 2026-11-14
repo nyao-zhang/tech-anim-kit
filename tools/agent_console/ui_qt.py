@@ -261,11 +261,20 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
 
     def _on_mcp_config() -> None:
         try:
+            from tak.mcp.server import python_executable
             snippet = json.dumps(core.mcp_config(), ensure_ascii=False, indent=2)
+            exe, source = python_executable()
             log_console.append("把下面这段加进 WorkBuddy / Claude Desktop 的 "
-                               "mcpServers 配置（普通 Python 即可，无需 Maya 解释器）：",
+                               "mcpServers 配置。command 必须是普通 Python，"
+                               "填成 Maya / DCC 宿主 exe 会导致 initialize 超时：",
                                "info")
             log_console.append(snippet, "info")
+            log_console.append("解释器：%s（来源：%s）" % (exe, source), "info")
+            if source.startswith("DCC 自带解释器") or exe == "python":
+                log_console.append(
+                    "当前进程是 DCC 宿主且没在 PATH 找到独立 Python；若客户端连不上，"
+                    "设环境变量 TAK_MCP_PYTHON 指向一个 python.exe 后重新生成配置。",
+                    "warning")
             try:
                 app = QtWidgets.QApplication.instance()
                 if app is not None and app.clipboard() is not None:

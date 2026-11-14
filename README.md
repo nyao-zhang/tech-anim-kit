@@ -2,7 +2,9 @@
 
 跨 DCC 技术动画工具集，面向 **Maya 2023+ / 3ds Max 2023+ / MotionBuilder 2023+ / Unreal Engine 5.8–5.9**。
 
-> 当前版本 `0.7.0`（**对话式工具台真的能干活**：一句话查/改 Maya 场景，经 MCP 暴露给外部 AI）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
+> 当前版本 `0.7.1`（**MCP 接得上了**：配置里的解释器不再误写成 `maya.exe`，`env` 补齐 `TAK_HOME`）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
+>
+> v0.7.1 修两个真机问题：从 Maya 面板「MCP 配置」复制出的片段把 `command` 写成了 `maya.exe`（客户端报 `MCP initialize timed out for "custom-mcp:tak-scene"`）；客户端全量替换 `env` 时 `~` 解析失败，握手能过但每个工具都回「桥未启动」。现在自动探测独立 Python，并把配置目录绝对路径写进 `env`，面板日志台会显示解释器来源。
 >
 > v0.7.0 补上此前缺失的整条链路：18 个受限场景动作（查场景 / 查绑定逻辑 / 创建资产 / 改名删除 / 设属性）、Maya 真实宿主实现、自然语言 → function calling（无 key 时本地关键词解析）、dry-run + 一次性 token + 人工确认 + undo，以及一个零依赖 stdio **MCP server**。面板、HTTP 桥、MCP 共用同一张动作白名单。详见 [docs/mcp.md](docs/mcp.md)。
 >
@@ -152,8 +154,8 @@ Maya 下共 **37 个检查项**（19 条内置规范 + 18 条来自规则提供�
 | `tools/` | 10 个插件（5 个工具 + 5 个内部规则提供者）+ `_template/` + `new_tool.py` |
 | `knowledge/` | 5 篇绑定知识库种子文档（命名、权重、FBX/UE 流水线、IK 重定向、DCC 差异） |
 | `fixtures/` | 20 好 + 20 坏骨架快照，判定器回归基线 |
-| `tests/` | 43 个测试模块 / 1197 个用例 |
-| `validation/` | UE headless 探测、mayapy 全量回归、跨版本冒烟、**四端一致性回归**、Maya 场景动作真机探针与实测证据 JSON |
+| `tests/` | 43 个测试模块 / 1203 个用例 |
+| `validation/` | UE headless 探测、mayapy 全量回归、跨版本冒烟、**四端一致性回归**、Maya 场景动作真机探针、**MCP 握手自检**与实测证据 JSON |
 | `CHANGELOG.md` | 变更日志（含每版的已知限制） |
 | `legacy/sources/` | 本机自研代码的只读整理副本（原文件未改动） |
 | `docs/` | 版本兼容、验证清单、插件指南、旧代码映射、批次交付报告、发布手册 |

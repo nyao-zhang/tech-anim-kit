@@ -1,7 +1,7 @@
 # 让外部 AI 直接操作 DCC 场景（MCP）
 
 > 一句需求 → AI 选出受限动作 → 本地桥 → Maya 主线程 → 真实查改场景。
-> 适用 TAK `0.7.0`　·　当前已实现宿主：**Maya 2023+**（Max / MoBu / UE 的能力表会列出，但没有宿主 handler，调用会明确报「未实现」）。
+> 适用 TAK `0.7.1`　·　当前已实现宿主：**Maya 2023+**（Max / MoBu / UE 的能力表会列出，但没有宿主 handler，调用会明确报「未实现」）。
 
 ## 1. 它和 v0.6 的「对话控制台」不是一回事
 
@@ -54,20 +54,47 @@ python -m tak.mcp --print-config
     "tak-scene": {
       "command": "C:\\...\\python.exe",
       "args": ["-m", "tak.mcp"],
-      "env": { "PYTHONPATH": "<仓库根目录>" }
+      "env": {
+        "PYTHONPATH": "<仓库根目录>",
+        "PYTHONIOENCODING": "utf-8",
+        "TAK_HOME": "C:\\Users\\<你>\\.tak"
+      }
     }
   }
 }
 ```
 
-把这段加进 WorkBuddy 的 MCP 配置（或 Claude Desktop 的 `claude_desktop_config.json`），然后重启客户端让它重新加载 MCP server。`command` 用**系统 Python** 即可 —— MCP server 只是 HTTP 客户端，不需要 Maya 的 Python 解释器，也不加载任何 DCC 模块。
+把这段加进 WorkBuddy 的 MCP 配置（或 Claude Desktop 的 `claude_desktop_config.json`），然后重启客户端让它重新加载 MCP server。
+
+> **`command` 必须是普通 `python.exe`，绝不能是 `maya.exe` / `3dsmax.exe` 之类的 DCC 宿主。**
+> v0.7.0 在面板里点「MCP 配置」时误用了 `sys.executable`，而它在 Maya 进程内等于
+> `maya.exe`；客户端会去启动 Maya GUI，永远等不到 `initialize`，报
+> `MCP initialize timed out for "custom-mcp:tak-scene"`。v0.7.1 起会自动探测独立
+> Python（`TAK_MCP_PYTHON` → 当前解释器 → PATH → `py -3` → `mayapy`），并把来源
+> 写进日志台。仍然不对时，设 `TAK_MCP_PYTHON` 指向一个 `python.exe` 再点一次。
+
+三个 `env` 键各有用途，别删：
+
+| 键 | 为什么必须有 |
+|---|---|
+| `PYTHONPATH` | 客户端的工作目录不是仓库根，不设就 `ModuleNotFoundError: tak` |
+| `PYTHONIOENCODING` | 固定 UTF-8，中文日志在 Windows 管道里不会编码失败 |
+| `TAK_HOME` | 配置目录的**绝对路径**。有些客户端把 `env` 当全量替换，少了 `USERPROFILE` 时 `os.path.expanduser("~")` 会返回字面 `~`，桥发现文件与 token 全找不到，工具会一律回「桥未启动」 |
+
+`TAK_HOME` 指向的是 `~/.tak` 目录本身（里面放 `config.json` / `bridge.json`），不是它的父目录。
 
 自检（不进 MCP 客户端也能做）：
 
 ```bash
 python -m tak.mcp --status                 # 看桥有没有开
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | python -m tak.mcp
+python -m tak.mcp --print-config          # 看当前生成的 command / env 对不对
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"check","version":"1"}}}' | python -m tak.mcp
+python validation/mcp_handshake_check.py   # 按当前 mcp.json 完整握手 + 真读场景
 ```
+
+最后一条应该**立刻**回一行 `{"jsonrpc":"2.0","id":1,"result":{...}}`。没回或卡住，先查 `command` 是不是被写成了 DCC 宿主 exe。
+
+`mcp_handshake_check.py` 会读你正在用的 `~/.workbuddy/mcp.json`，按里面的 `command` / `args` / `env` 真起一个子进程（故意不继承 `USERPROFILE`，模拟最严苛的客户端），依次跑 `initialize`、`tools/list`、`tak_status`，桥在跑时再只读一次 `tak_scene_summary`。输出每一步耗时与结论，结果写 `validation/mcp_handshake_result.json`，退出码 0 才是全通。换机器、换客户端、换了 Python 路径之后先跑它，比看日志快。
 
 ### 第 3 步：要不要允许写入
 
@@ -150,6 +177,8 @@ AI 把 preview 原样展示给你，你说「做吧」，它才发第二次：
 
 | 现象 | 原因 / 处理 |
 |---|---|
+| `MCP initialize timed out for "custom-mcp:tak-scene"` | `command` 被写成了 `maya.exe` 等 DCC 宿主进程（v0.7.0 面板「MCP 配置」的 bug）：客户端去启动 Maya GUI，永远等不到握手。运行 `python -m tak.mcp --print-config` 重新生成，确认是 `python.exe`；改完在客户端重新 Trust / 重启使其加载新配置 |
+| 握手成功，但每个工具都回「桥未启动」 | 客户端把 `env` 当全量替换，进程里没有 `USERPROFILE`，`expanduser("~")` 返回字面 `~`，发现文件找不到。在 `env` 里补 `TAK_HOME` 为 `~/.tak` 的绝对路径，并用 `python -m tak.mcp --status` 对比 |
 | `TAK 桥未启动` | 在 Maya 面板点「启动桥接」；`python -m tak.mcp --status` 确认 |
 | `401 缺少或错误的 X-TAK-Token` | `~/.tak/config.json` 的 `bridge.token` 与发现文件不一致；停桥再启动一次 |
 | `外部写入未启用` | 面板勾选「允许写入」，或 `python -m tak.core.bridge write on` |
@@ -177,3 +206,5 @@ MCP 侧不依赖 AI 端点：外部 AI 客户端自己就是模型，TAK 只提�
 - 桥 + MCP：`tools/list` 21 个工具、`tools/call` 读到真实 Maya 场景数据、写开关拦截、打开后 MCP **真的创建了节点**。
 
 `mayapy` standalone 没有 Qt 事件循环，`executeInMainThreadWithResult` 的 idle 队列不推进，所以探针里把宿主执行器换成同线程直调；真实 Maya GUI 的线程切换由适配器注册的 `maya.utils` 执行器保证，**这条切换本身不在 standalone 探针覆盖范围内**。HTTP 传输、token 校验、参数白名单与两阶段确认都在真机探针与单元测试中覆盖。
+
+v0.7.1 另外按**客户端实际配置**跑了一次端到端握手（子进程只给 `env` 里的三个键 + `SystemRoot`/`PATH`）：`initialize` 653 ms、`tools/list` 21 个工具且 `bridge_running=True`、`tak_status` 返回真实桥地址、`tak_scene_summary` 从正在运行的 Maya 2026 GUI 读到帧范围 `1–120` 与节点计数。**客户端 UI 里点 Trust 后是否重新加载配置这一步没有代跑**，需要你重启一次客户端确认。

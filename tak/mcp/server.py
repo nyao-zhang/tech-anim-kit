@@ -29,6 +29,7 @@ import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
 from tak.core import bridge as tak_bridge
+from tak.core import config as tak_config
 from tak.core import scene_actions as sa
 from tak.version import __version__
 
@@ -87,7 +88,12 @@ def bridge_tools() -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """问桥要能力表；桥没开时用 core 的静态声明兜底。"""
     status = tak_bridge.bridge_status()
     if status.get("running"):
-        answer = tak_bridge.call("/bridge/actions", timeout=8.0)
+        # 桥在但宿主主线程卡住时不能让 tools/list 拖到客户端超时。
+        try:
+            answer = tak_bridge.call("/bridge/actions", timeout=4.0)
+        except Exception as exc:  # pragma: no cover - 宿主相关
+            _stderr("/bridge/actions 探测失败，回落静态能力表: %s" % exc)
+            answer = {}
         if answer.get("ok") and answer.get("mcp_tools"):
             tools = list(answer["mcp_tools"])
             for index, tool in enumerate(tools):
@@ -260,16 +266,39 @@ def _error(request_id: Any, code: int, message: str) -> Dict[str, Any]:
             "error": {"code": code, "message": message}}
 
 
+def _write(sink: Any, payload: Any) -> bool:
+    """写一条协议消息，返回 False 表示管道已断应退出循环。
+
+    输出强制 ``ensure_ascii=True``：Windows 下 stdout 可能是 GBK，中文或特殊
+    字符会抛 UnicodeEncodeError；一旦抛在写入处，客户端就永远等不到这一帧，
+    表现和「initialize 超时」一模一样。JSON 转义后仍是合法 UTF-8 文本，
+    客户端解析完照常显示中文。
+    """
+    try:
+        sink.write(json.dumps(payload, ensure_ascii=True, default=str) + "\n")
+        sink.flush()
+        return True
+    except (BrokenPipeError, OSError, UnicodeError, ValueError, TypeError):
+        return False
+
+
 def serve(stdin: Any = None, stdout: Any = None) -> int:
-    """stdio 主循环。每行一个 JSON 对象，直到 EOF。"""
+    """stdio 主循环。每行一个 JSON 对象，直到 EOF。
+
+    启动阶段的任何异常都不能让进程静默退出 —— 客户端只会看到 initialize 超时。
+    """
     source = stdin if stdin is not None else sys.stdin
     sink = stdout if stdout is not None else sys.stdout
-    _stderr("TAK MCP server %s ready (bridge=%s)" %
-            (__version__, tak_bridge.bridge_status().get("url") or "not running"))
+    try:
+        url = (tak_bridge.bridge_status() or {}).get("url") or "not running"
+    except Exception as exc:  # 发现文件损坏等，不影响协议本身
+        url = "unknown"
+        _stderr("bridge_status 失败（不影响协议）: %s" % exc)
+    _stderr("TAK MCP server %s ready (bridge=%s)" % (__version__, url))
     while True:
         try:
             line = source.readline()
-        except (KeyboardInterrupt, OSError):
+        except (KeyboardInterrupt, OSError, UnicodeError):
             break
         if not line:
             break
@@ -279,36 +308,118 @@ def serve(stdin: Any = None, stdout: Any = None) -> int:
         try:
             request = json.loads(line)
         except ValueError:
-            sink.write(json.dumps(_error(None, -32700, "Parse error")) + "\n")
-            sink.flush()
-            continue
-        answer = handle(request)
-        if answer is None:
+            if not _write(sink, _error(None, -32700, "Parse error")):
+                break
             continue
         try:
-            sink.write(json.dumps(answer, ensure_ascii=False, default=str) + "\n")
-            sink.flush()
-        except (BrokenPipeError, OSError):
+            answer = handle(request)
+        except Exception as exc:  # 单条消息失败必须继续服务下一条
+            _stderr("handle 异常: %s\n%s" % (exc, traceback.format_exc()[-800:]))
+            answer = _error(None, -32603, "Internal error: %s" % type(exc).__name__)
+        if answer is None:
+            continue
+        if not _write(sink, answer):
             break
     return 0
+
+
+#: 能执行 ``-m tak.mcp`` 的解释器文件名前缀；其余一律视为 DCC 宿主。
+_PYTHON_EXE_PREFIXES = ("python", "pypy", "mayapy")
+#: 显式排除的宿主进程，避免名字碰巧带 python 的宿主被误判。
+_DCC_EXE_NAMES = frozenset({
+    "maya.exe", "3dsmax.exe", "motionbuilder.exe", "unrealeditor.exe",
+    "unrealeditor-cmd.exe", "blender.exe", "houdini.exe",
+})
+
+
+def _is_python_exe(path: str) -> bool:
+    name = os.path.basename(str(path or "")).lower()
+    if not name or name in _DCC_EXE_NAMES:
+        return False
+    return any(name.startswith(prefix) for prefix in _PYTHON_EXE_PREFIXES)
+
+
+def python_executable() -> Tuple[str, str]:
+    """返回能启动 MCP server 的 Python 解释器，以及它的来源说明。
+
+    **为什么不能直接用 ``sys.executable``**：面板里点「MCP 配置」时这段代码
+    跑在 Maya 进程内，``sys.executable`` 是 ``maya.exe``。把它写进 mcpServers
+    会让客户端去启动 Maya GUI，永远等不到 ``initialize`` 响应 —— 表现为
+    「MCP initialize timed out」。DCC 宿主一律跳过，按可用性逐级探测。
+
+    探测顺序：显式 ``TAK_MCP_PYTHON`` → 当前解释器 → ``sys._base_executable``
+    → PATH → Windows ``py -3`` → DCC 自带解释器（mayapy，较慢，仅兜底）
+    → 裸 ``python``（交给客户端 PATH 解析）。只做路径/名称检查，不启动子进程，
+    点一下配置按钮不该卡住 DCC 界面。
+    """
+    override = os.environ.get("TAK_MCP_PYTHON", "").strip().strip('"')
+    if override and os.path.isfile(override):
+        return override, "TAK_MCP_PYTHON"
+
+    current = str(sys.executable or "")
+    if _is_python_exe(current) and os.path.isfile(current):
+        return current, "当前解释器"
+
+    base = str(getattr(sys, "_base_executable", "") or "")
+    if _is_python_exe(base) and os.path.isfile(base):
+        return base, "sys._base_executable"
+
+    import shutil
+    for name in ("python", "python3"):
+        found = shutil.which(name) or ""
+        if _is_python_exe(found) and os.path.isfile(found):
+            return found, "PATH: %s" % name
+
+    launcher = shutil.which("py") or ""
+    if launcher:
+        try:
+            import subprocess
+            out = subprocess.run(
+                [launcher, "-3", "-c", "import sys; print(sys.executable)"],
+                capture_output=True, text=True, timeout=5)
+            lines = [line.strip() for line in (out.stdout or "").splitlines()
+                     if line.strip()]
+            found = lines[-1] if out.returncode == 0 and lines else ""
+            if _is_python_exe(found) and os.path.isfile(found):
+                return found, "py -3"
+        except Exception as exc:  # pragma: no cover - 平台相关
+            _stderr("py launcher 探测失败: %s" % exc)
+
+    folder = os.path.dirname(current)
+    for name in ("mayapy.exe", "mayapy", "python.exe", "python"):
+        sibling = os.path.join(folder, name)
+        if _is_python_exe(sibling) and os.path.isfile(sibling):
+            return sibling, "DCC 自带解释器（启动较慢）"
+
+    return "python", "未探测到绝对路径，交给客户端 PATH 解析"
 
 
 def config_snippet() -> Dict[str, Any]:
     """给 WorkBuddy / Claude Desktop 的 ``mcpServers`` 片段。
 
-    用当前解释器绝对路径，避免 Windows 上 ``python`` 不在 PATH 或指向别的环境。
-    ``PYTHONPATH`` 指向仓库根，这样任意工作目录下都能 import tak。
+    ``command`` 由 :func:`python_executable` 决定，**绝不能是 DCC 宿主进程**。
+    ``PYTHONPATH`` 指向仓库根，这样任意工作目录下都能 import tak；
+    ``PYTHONIOENCODING`` 固定 UTF-8，避免中文路径/日志在 Windows 上编码失败。
+    ``TAK_HOME`` 写的是配置目录**绝对路径**：有些客户端把 ``env`` 当全量替换，
+    少了 ``USERPROFILE`` 时 ``os.path.expanduser("~")`` 会返回字面 ``~``，
+    发现文件与 token 全部找不到，工具会一律回「桥未启动」。
     """
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    exe, _source = python_executable()
     return {
         "mcpServers": {
             "tak-scene": {
-                "command": sys.executable,
+                "command": exe,
                 "args": ["-m", "tak.mcp"],
-                "env": {"PYTHONPATH": root},
+                "env": {
+                    "PYTHONPATH": root,
+                    "PYTHONIOENCODING": "utf-8",
+                    "TAK_HOME": tak_config.config_home(),
+                },
             }
         }
     }
 
 
-__all__ = ["PROTOCOL_VERSION", "bridge_tools", "config_snippet", "handle", "serve"]
+__all__ = ["PROTOCOL_VERSION", "bridge_tools", "config_snippet", "handle",
+           "python_executable", "serve"]

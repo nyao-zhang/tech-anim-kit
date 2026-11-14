@@ -13,6 +13,65 @@
 
 （无）
 
+## [0.7.1] - 2026-11-14
+
+一句话：**修好「MCP initialize timed out」——配置里的 `command` 曾被写成 `maya.exe`。**
+
+起因是用户按 v0.7.0 的指引在 Maya 面板里点「MCP 配置」，客户端报
+`MCP initialize timed out for "custom-mcp:tak-scene"`。查本机
+`~/.workbuddy/mcp.json`，`command` 确实是
+`C:\Program Files\Autodesk\Maya2026\bin\maya.exe`。
+
+### Fixed
+
+- **`config_snippet()` 用 `sys.executable` 当 Python 解释器**
+  （`tak/mcp/server.py`、`tools/agent_console/ui_qt.py`）。面板里的配置按钮跑在
+  Maya 进程内，`sys.executable` 是 `maya.exe`；`maya.exe -m tak.mcp` 不会启动
+  stdio server，客户端永远等不到 `initialize`。改为 `python_executable()` 逐级
+  探测：`TAK_MCP_PYTHON` → 当前解释器（仅当文件名确实是 Python）→
+  `sys._base_executable` → PATH → Windows `py -3` → DCC 自带 `mayapy`（兜底）
+  → 裸 `python`。只做路径/名称检查，不启动子进程，不卡 DCC 界面；面板日志台
+  现在会打印解释器与来源，来源可疑时给 warning。
+- **`env` 少了 `TAK_HOME`，客户端全量替换环境时桥永远找不到**。Windows 上没有
+  `USERPROFILE` 时 `os.path.expanduser("~")` 返回字面 `~`，`discovery_path()`
+  变成 `~\.tak\bridge.json`，握手成功但所有工具回「桥未启动」。配置片段现在写
+  `TAK_HOME` 绝对路径，同时固定 `PYTHONIOENCODING=utf-8`。
+- **stdio 输出用 `ensure_ascii=False`**（`tak/mcp/server.py`）。Windows 管道若是
+  GBK，中文响应会在 `sink.write` 抛 `UnicodeEncodeError`，客户端同样表现为等不到
+  响应。改为纯 ASCII JSON 转义、集中到 `_write()`，并对
+  `bridge_status()` / `handle()` 的启动期与逐条异常加保护：任何一条都不能让
+  stdio 进程静默退出。
+- `bridge_tools()` 向桥要能力表的超时 8s → 4s，失败回落静态能力表，避免宿主
+  主线程正忙时 `tools/list` 拖到客户端超时。
+
+### Changed
+
+- `docs/mcp.md`：配置示例补三个 `env` 键及逐项说明；排错表新增
+  「initialize timed out」与「握手成功但都报桥未启动」两条；记录按客户端实际
+  配置跑的端到端握手数据。
+- 面板「MCP 配置」输出到日志台时附上解释器路径与来源。
+- 新增 `validation/mcp_handshake_check.py`：按客户端**实际** `mcp.json` 起子进程、
+  只给最小 env，完整跑 `initialize → tools/list → tak_status → tak_scene_summary`，
+  结果写 `validation/mcp_handshake_result.json`，退出码即结论。换机器/换客户端时
+  不必再手工拼命令。
+
+### 验证
+
+| 项 | 结果 |
+|---|---|
+| `python -m pytest -q` | 全绿；MCP 模块 14 条，其中新增 6 条（真实子进程 `initialize` 往返、DCC 宿主伪装、精简 env 定位、启动期异常不杀进程等） |
+| `python validation/mcp_handshake_check.py` | OK：`initialize` 625 ms、`tools/list` 21 工具且 `bridge_running=true`、`tak_status` 返回桥地址、`tak_scene_summary` 读到真实 Maya 场景（帧范围 `1–120`） |
+| 按 `~/.workbuddy/mcp.json` 启动子进程（只给 `env` 三键 + `SystemRoot`/`PATH`） | `initialize` 653 ms；`tools/list` 21 个工具且 `bridge_running=True`；`tak_status` 返回 `http://127.0.0.1:64486`；`tak_scene_summary` 从正在运行的 Maya 2026 GUI 读到帧范围 `1–120` 与节点计数 |
+| 兼容 / 主题 / fixtures | PASS(8) / 一致 / 40 个一致 |
+
+### Known limitations
+
+- **客户端侧重新加载没有代跑**：`~/.workbuddy/mcp.json` 已就地改好，但自定义
+  MCP 不会自动重连，需要用户在连接器管理页重新 Trust 或重启客户端。
+- 探测不到任何独立 Python 且没设 `TAK_MCP_PYTHON` 时，`command` 回落到裸
+  `python`（靠客户端 PATH 解析）或 `mayapy.exe`（启动较慢）；两条都在面板日志台
+  明确提示，不假装一定可用。
+
 ## [0.7.0] - 2026-11-14
 
 一句话：**把「对话式控制台」从规则问答器改成真能查/改场景的 Agent 入口，并首次提供 MCP 接入**。

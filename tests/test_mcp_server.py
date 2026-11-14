@@ -115,13 +115,133 @@ def test_serve_handles_parse_error_and_multiple_lines(monkeypatch):
     assert json.loads(lines[1])["id"] == 7
 
 
-def test_config_snippet_uses_current_interpreter():
+def test_config_snippet_uses_current_interpreter(monkeypatch):
     import sys
+    monkeypatch.delenv("TAK_MCP_PYTHON", raising=False)
     snippet = config_snippet()
     entry = snippet["mcpServers"]["tak-scene"]
     assert entry["command"] == sys.executable
     assert entry["args"] == ["-m", "tak.mcp"]
     assert entry["env"]["PYTHONPATH"]
+    assert entry["env"]["PYTHONIOENCODING"] == "utf-8"
+    assert entry["env"]["TAK_HOME"]
+
+
+def test_config_snippet_never_points_at_dcc_host(monkeypatch):
+    """在 Maya 里点「MCP 配置」时 sys.executable 是 maya.exe，不能写进配置。
+
+    这是 v0.7.0 的真实故障：客户端去启动 Maya GUI，永远等不到 initialize。
+    """
+    import sys
+    monkeypatch.delenv("TAK_MCP_PYTHON", raising=False)
+    fake_maya = r"C:\Program Files\Autodesk\Maya2026\bin\maya.exe"
+    monkeypatch.setattr(sys, "executable", fake_maya)
+    monkeypatch.setattr(sys, "_base_executable", fake_maya, raising=False)
+    exe, source = mcp.python_executable()
+    entry = config_snippet()["mcpServers"]["tak-scene"]
+    assert entry["command"] == exe
+    assert entry["command"] != fake_maya
+    assert not entry["command"].lower().endswith("maya.exe")
+    assert mcp._is_python_exe(exe) or exe == "python"
+    assert source not in ("当前解释器", "sys._base_executable")
+
+
+def test_config_snippet_honors_explicit_python(monkeypatch, tmp_path):
+    fake = tmp_path / "python.exe"
+    fake.write_text("")
+    monkeypatch.setenv("TAK_MCP_PYTHON", str(fake))
+    assert config_snippet()["mcpServers"]["tak-scene"]["command"] == str(fake)
+    assert mcp.python_executable()[1] == "TAK_MCP_PYTHON"
+
+
+def test_python_exe_detection_rejects_dcc_hosts():
+    for name in ("maya.exe", "3dsmax.exe", "MotionBuilder.exe",
+                 "UnrealEditor.exe", "blender.exe"):
+        assert not mcp._is_python_exe(r"C:\bin\%s" % name)
+    assert mcp._is_python_exe(r"C:\bin\python.exe")
+    assert mcp._is_python_exe(r"C:\bin\python3.11")
+    assert mcp._is_python_exe(r"C:\bin\mayapy.exe")
+
+
+def test_config_snippet_env_survives_minimal_client_env(monkeypatch, tmp_path):
+    """客户端把 env 当全量替换时，TAK_HOME 保证桥发现文件仍可定位。"""
+    import os
+    import subprocess
+    import sys
+
+    monkeypatch.setenv("TAK_HOME", str(tmp_path))
+    entry = config_snippet()["mcpServers"]["tak-scene"]
+    assert entry["env"]["TAK_HOME"] == str(tmp_path)
+    env = {
+        "PYTHONPATH": entry["env"]["PYTHONPATH"],
+        "PYTHONIOENCODING": "utf-8",
+        "TAK_HOME": entry["env"]["TAK_HOME"],
+        "SystemRoot": os.environ.get("SystemRoot", r"C:\Windows"),
+        "PATH": os.environ.get("PATH", ""),
+    }
+    out = subprocess.run(
+        [sys.executable, "-c",
+         "from tak.core import bridge; print(bridge.discovery_path())"],
+        env=env, capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    assert str(tmp_path).lower() in out.stdout.lower()
+
+
+def test_stdio_initialize_roundtrip_with_real_process():
+    """真实子进程起 server 并等 initialize；纯 ASCII 输出，防止 Windows 编码炸管道。"""
+    import os
+    import subprocess
+    import sys
+    import threading
+
+    root = os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(mcp.__file__))))
+    env = dict(os.environ)
+    env["PYTHONPATH"] = root
+    env["PYTHONIOENCODING"] = "utf-8"
+    proc = subprocess.Popen([sys.executable, "-m", "tak.mcp"],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, cwd=root, env=env)
+    try:
+        request = {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                   "params": {"protocolVersion": "2024-11-05",
+                              "capabilities": {},
+                              "clientInfo": {"name": "pytest", "version": "1"}}}
+        proc.stdin.write((json.dumps(request) + "\n").encode("ascii"))
+        proc.stdin.flush()
+        box: dict = {}
+
+        def _read():
+            box["line"] = proc.stdout.readline()
+
+        reader = threading.Thread(target=_read, daemon=True)
+        reader.start()
+        reader.join(20)
+        assert "line" in box, "20 秒内没有收到 initialize 响应"
+        raw = box["line"]
+        raw.decode("ascii")  # 非 ASCII 会抛，正是要拦的回归
+        answer = json.loads(raw.decode("ascii"))
+        assert answer["id"] == 1
+        assert answer["result"]["serverInfo"]["name"] == "tak-scene-bridge"
+        assert "先用" in answer["result"]["instructions"]
+    finally:
+        proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            pass
+
+
+def test_serve_survives_bridge_status_failure(monkeypatch):
+    """启动日志里的探测失败不能让整个 stdio 进程静默退出。"""
+    def broken():
+        raise RuntimeError("discovery 文件损坏")
+
+    monkeypatch.setattr(mcp.tak_bridge, "bridge_status", broken)
+    source = io.StringIO('{"jsonrpc":"2.0","id":3,"method":"ping"}\n')
+    sink = io.StringIO()
+    assert serve(stdin=source, stdout=sink) == 0
+    assert json.loads(sink.getvalue().strip())["id"] == 3
 
 
 def test_mcp_layer_has_no_dcc_imports():
