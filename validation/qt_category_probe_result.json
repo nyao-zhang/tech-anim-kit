@@ -1,0 +1,168 @@
+{
+  "after_widgets": [
+    {
+      "class": "QMainWindow",
+      "modal": false,
+      "name": "MayaWindow",
+      "title": "Maya"
+    },
+    {
+      "class": "QMainWindow",
+      "modal": false,
+      "name": "takReportWindow",
+      "title": "TAK 报告 · VLM Defect Inspector 抽帧缺陷诊断"
+    },
+    {
+      "class": "QMainWindow",
+      "modal": false,
+      "name": "tak_mldeformer_factory",
+      "title": "TAK · ML Deformer 数据工厂 · maya"
+    },
+    {
+      "class": "QMainWindow",
+      "modal": false,
+      "name": "tak_agent_console",
+      "title": "TAK · Agent Console 对话式控制台 · maya"
+    },
+    {
+      "class": "QMainWindow",
+      "modal": false,
+      "name": "takReportWindow",
+      "title": "TAK 报告 · 场景检查"
+    },
+    {
+      "class": "QMainWindow",
+      "modal": false,
+      "name": "takReportWindow",
+      "title": "TAK 报告 · 导出 / 导入"
+    }
+  ],
+  "before_widgets": [
+    {
+      "class": "QMainWindow",
+      "modal": false,
+      "name": "MayaWindow",
+      "title": "Maya"
+    }
+  ],
+  "category_switch": [
+    {
+      "added_windows": [],
+      "category": "全部 · 5",
+      "ms": 11.9,
+      "removed_windows": [],
+      "selected": "mldeformer_factory",
+      "stdout": "",
+      "tools": 5
+    },
+    {
+      "added_windows": [],
+      "category": "通用 · 2",
+      "ms": 25.2,
+      "removed_windows": [],
+      "selected": "qa_inspector",
+      "stdout": "",
+      "tools": 2
+    },
+    {
+      "added_windows": [],
+      "category": "绑定 · 3",
+      "ms": 34.0,
+      "removed_windows": [],
+      "selected": "mldeformer_factory",
+      "stdout": "",
+      "tools": 3
+    },
+    {
+      "added_windows": [],
+      "category": "动画 · 2",
+      "ms": 24.2,
+      "removed_windows": [],
+      "selected": "defect_inspector",
+      "stdout": "",
+      "tools": 2
+    },
+    {
+      "added_windows": [],
+      "category": "管线 · 1",
+      "ms": 31.1,
+      "removed_windows": [],
+      "selected": "asset_pipeline",
+      "stdout": "",
+      "tools": 1
+    },
+    {
+      "added_windows": [],
+      "category": "AI · 3",
+      "ms": 23.4,
+      "removed_windows": [],
+      "selected": "mldeformer_factory",
+      "stdout": "",
+      "tools": 3
+    }
+  ],
+  "ok": true,
+  "open_tool": [
+    {
+      "id": "mldeformer_factory",
+      "is_report": false,
+      "ms": 44.4,
+      "object_name": "tak_mldeformer_factory",
+      "result": "QMainWindow",
+      "stdout": "",
+      "still_visible": true,
+      "title": "TAK · ML Deformer 数据工厂 · maya",
+      "visible": true,
+      "weak_cache_alive": true
+    },
+    {
+      "id": "defect_inspector",
+      "is_report": false,
+      "ms": 53.2,
+      "result": "ToolResult",
+      "stdout": "[TAK][VLM] 界面创建失败: ImportError: cannot import name '_theme_path' from 'tak.ui.qt' (C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35\\tak\\ui\\qt\\__init__.py)\n",
+      "still_visible": null,
+      "title": "-",
+      "weak_cache_alive": false
+    },
+    {
+      "id": "qa_inspector",
+      "is_report": false,
+      "ms": 130.0,
+      "result": "ToolResult",
+      "stdout": "[TAK][QA] 界面创建失败: ImportError: cannot import name '_theme_path' from 'tak.ui.qt' (C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35\\tak\\ui\\qt\\__init__.py)\n",
+      "still_visible": null,
+      "title": "-",
+      "weak_cache_alive": false
+    },
+    {
+      "id": "agent_console",
+      "is_report": false,
+      "ms": 48.5,
+      "object_name": "tak_agent_console",
+      "result": "QMainWindow",
+      "stdout": "",
+      "still_visible": true,
+      "title": "TAK · Agent Console 对话式控制台 · maya",
+      "visible": true,
+      "weak_cache_alive": true
+    },
+    {
+      "id": "asset_pipeline",
+      "is_report": false,
+      "ms": 48.8,
+      "result": "ToolResult",
+      "stdout": "[TAK][Pipeline] 界面创建失败: ImportError: cannot import name '_theme_path' from 'tak.ui.qt' (C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35\\tak\\ui\\qt\\__init__.py)\n",
+      "still_visible": null,
+      "title": "-",
+      "weak_cache_alive": false
+    }
+  ],
+  "visible_tools": [
+    "mldeformer_factory",
+    "defect_inspector",
+    "qa_inspector",
+    "agent_console",
+    "asset_pipeline"
+  ]
+}

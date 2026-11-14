@@ -186,7 +186,7 @@ class ResultTable(_FrameBase):
 
     COLUMNS = ("级别", "规则", "节点", "说明", "修复建议")
 
-    def __init__(self, parent: Any = None) -> None:
+    def __init__(self, parent: Any = None, title: str = "运行结果") -> None:
         super().__init__(parent)
         if not HAS_QT:
             return
@@ -201,10 +201,12 @@ class ResultTable(_FrameBase):
 
         head = QtWidgets.QHBoxLayout()
         head.setSpacing(8)
-        title = QtWidgets.QLabel("体检结果")
-        title_font = title.font()
+        # 标题由调用方决定：以前硬编码「体检结果」，导致导出、ML 数据集、
+        # 缺陷检查这些工具的界面看起来全都是同一个体检窗口。
+        self.heading_label = QtWidgets.QLabel(str(title or "运行结果"))
+        title_font = self.heading_label.font()
         title_font.setBold(True)
-        title.setFont(title_font)
+        self.heading_label.setFont(title_font)
         self.summary_label = QtWidgets.QLabel("")
         self.summary_label.setProperty("takMuted", "true")
         self.filter_box = QtWidgets.QComboBox()
@@ -212,7 +214,7 @@ class ResultTable(_FrameBase):
         for severity in _SEVERITY_LABELS:
             self.filter_box.addItem(severity.upper(), severity)
         self.filter_box.currentIndexChanged.connect(self._on_filter_changed)
-        head.addWidget(title, 0)
+        head.addWidget(self.heading_label, 0)
         head.addWidget(self.summary_label, 1)
         head.addWidget(self.filter_box, 0)
 
@@ -245,6 +247,12 @@ class ResultTable(_FrameBase):
         self._refresh()
 
     # ------------------------------------------------------------ 数据入口
+    def set_title(self, text: str) -> "ResultTable":
+        """改表头标题；工具可以给自己的结果区起名字。"""
+        if HAS_QT and hasattr(self, "heading_label"):
+            self.heading_label.setText(str(text or "运行结果"))
+        return self
+
     def set_report(self, report: Any) -> "ResultTable":
         findings = list(getattr(report, "findings", []) or [])
         return self.set_findings(findings)
@@ -721,29 +729,42 @@ class ToolMainWindow(_MainWindowBase):
             self._tools = []
             self.log_console.append("插件发现失败: %s: %s"
                                     % (type(exc).__name__, exc), "error")
-        self.tool_list.blockSignals(True)
-        self.tool_list.clear()
-        for tool in self._tools:
-            item = QtWidgets.QListWidgetItem(str(tool.get("name") or tool.get("id") or "未命名"))
-            tip = str(tool.get("summary") or tool.get("description") or "")
-            item.setToolTip(tip)
-            item.setData(QtCore.Qt.UserRole, str(tool.get("id") or ""))
-            self.tool_list.addItem(item)
-        self.tool_list.blockSignals(False)
-
+        # 批量重建时先停掉重绘：Maya 里每新建一个 QLabel 都会触发一次 QSS
+        # 重算与重绘，连续切分类时用户会明显感到「卡住几秒」。
+        self.tool_list.setUpdatesEnabled(False)
+        self.detail_panel.setUpdatesEnabled(False)
         try:
-            names = {c["id"]: c["name"] for c in self._categories}
-        except Exception:
-            names = {}
-        self.detail_panel.set_category_names(names)
+            self.tool_list.blockSignals(True)
+            self.tool_list.clear()
+            for tool in self._tools:
+                item = QtWidgets.QListWidgetItem(
+                    str(tool.get("name") or tool.get("id") or "未命名"))
+                tip = str(tool.get("summary") or tool.get("description") or "")
+                item.setToolTip(tip)
+                item.setData(QtCore.Qt.UserRole, str(tool.get("id") or ""))
+                self.tool_list.addItem(item)
+            self.tool_list.blockSignals(False)
 
-        if self._tools:
-            self.tool_list.setCurrentRow(0)
-            self._on_tool_selected(0)
-        else:
-            self._current_tool_id = ""
-            self.detail_panel.set_tool(None)
-            self.log_console.append("当前分类下没有可用工具。", "warning")
+            try:
+                names = {c["id"]: c["name"] for c in self._categories}
+            except Exception:
+                names = {}
+            self.detail_panel.set_category_names(names)
+
+            if self._tools:
+                self.tool_list.setCurrentRow(0)
+                # setCurrentRow 在信号未屏蔽时会自己触发 _on_tool_selected，
+                # 以前这里又显式调一次，等于每次切分类把详情重建两遍。
+                first_id = str(self._tools[0].get("id") or "")
+                if self._current_tool_id != first_id:
+                    self._on_tool_selected(0)
+            else:
+                self._current_tool_id = ""
+                self.detail_panel.set_tool(None)
+                self.log_console.append("当前分类下没有可用工具。", "warning")
+        finally:
+            self.tool_list.setUpdatesEnabled(True)
+            self.detail_panel.setUpdatesEnabled(True)
 
     def select_tool(self, tool_id: str) -> bool:
         """选中指定工具；不在当前分类时先切回「全部」。"""
@@ -785,16 +806,32 @@ class ToolMainWindow(_MainWindowBase):
         if not target:
             self.log_console.append("没有选中任何工具。", "warning")
             return None
-        from .launcher import open_tool as _open_tool
+        from .launcher import last_open_error, open_tool as _open_tool
         self.detail_panel.set_status("正在打开 %s ..." % target)
         window = _open_tool(target, dcc=self.dcc)
-        if window is None:
+        error = last_open_error(target)
+        if error:
+            # 界面加载/构造失败：如实报错，绝不偷偷跑一遍体检冒充工具界面。
+            # Qt 槽里的异常不会自己冒到界面上，必须显式写进详情区与日志台。
+            self.detail_panel.set_status("打不开 %s 的界面：%s" % (target, error),
+                                         "error")
+            self.log_console.append("工具 %s 界面打开失败：%s" % (target, error),
+                                    "error")
+            self.status_bar.set_status("界面打开失败：%s" % target)
+            self._switch_tab(0)
+        elif window is None:
             self.detail_panel.set_status("该工具没有可用界面，已尝试通用运行。", "warning")
             self.log_console.append("工具 %s 没有独立界面，已回退通用运行。" % target,
                                     "warning")
-        else:
+        elif hasattr(window, "windowTitle"):
             self.detail_panel.set_status("已打开 %s" % target)
             self.log_console.append("打开工具界面：%s" % target, "info")
+        else:
+            # 回退分支返回 ToolResult，不是窗口；说清楚发生了什么，别让用户
+            # 以为自己打开的是这个工具的专用界面。
+            note = "该工具没有独立界面，已按通用契约运行并另开结果报告。"
+            self.detail_panel.set_status(note, "warning")
+            self.log_console.append("%s：%s" % (target, note), "warning")
         return window
 
     def open_settings(self) -> Any:
@@ -834,6 +871,7 @@ class ToolMainWindow(_MainWindowBase):
             self.status_bar.busy(False)
 
         report = getattr(result, "report", None)
+        self.result_table.set_title("%s · 运行结果" % target)
         self.result_table.set_report(report)
         counts = getattr(report, "counts", None)
         summary = ""

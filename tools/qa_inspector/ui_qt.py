@@ -39,7 +39,7 @@ def show(dcc: str = "maya", omui: Any = None) -> Optional[Any]:
 
 def _build(dcc: str) -> Any:
     from tak.compat.qt import QtCore, QtWidgets, apply_theme
-    from tak.ui.qt import LogConsole, ResultTable, _theme_path
+    from tak.ui.qt import LogConsole, ResultTable, theme_path
     from tak.ui.qt.launcher import host_main_window
 
     core = _core()
@@ -123,7 +123,7 @@ def _build(dcc: str) -> Any:
     outer.addLayout(footer)
 
     window.setCentralWidget(central)
-    apply_theme(window, _theme_path("dark"))
+    apply_theme(window, theme_path("dark"))
 
     checkable = QtCore.Qt.ItemIsUserCheckable
     checked = QtCore.Qt.Checked

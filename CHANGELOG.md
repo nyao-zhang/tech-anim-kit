@@ -13,6 +13,70 @@
 
 （无）
 
+## [0.6.1] - 2026-11-14
+
+一句话：**「很多工具打开还是体检界面」和「切分类卡几秒、弹窗自己消失」是同一个
+真机 bug 的两个面**，这一版把两个根因都挖掉，不是改文案糊过去。
+
+### Fixed
+
+- **三个工具打开后是体检报告**（用户反馈第一句）。真机探针
+  `validation/qt_category_probe_gui.py` 抓到 stdout：
+  `ImportError: cannot import name '_theme_path' from 'tak.ui.qt'`。
+  `tools/qa_inspector/ui_qt.py`、`tools/asset_pipeline/ui_qt.py`、
+  `tools/defect_inspector/ui_qt.py` 从 `tak.ui.qt` 导入 `_theme_path`，但
+  `tak/ui/qt/__init__.py` 从未导出它。`show()` 自己的 `except` 把 ImportError
+  吞掉返回 `None`，`launcher.open_tool()` 又把它当成「没有界面」→ 静默跑一遍
+  通用体检 → 弹出 `TAK 报告 · 场景检查` 之类的窗口。用户看到的「体检界面」
+  其实是回退报告，工具界面根本没被创建。
+  修法：补公开 `theme_path()` 并保留 `_theme_path` 兼容别名，三个工具改用公开名；
+  `tests/test_qt_components.py` 增加 AST 护栏，扫描所有 `tools/*/ui_qt.py` 的
+  `from tak.ui.qt import X`，缺导出直接测试失败（CI 没有 PySide，只有静态检查
+  能拦住这类「无 Qt 全绿、真机全挂」）。
+- **自带界面失败不再冒充工具界面**：`launcher.open_tool()` 现在区分「真没有
+  `ui_qt.py`」与「有界面但加载/构造失败」。后者把原因写进
+  `last_open_error()`，由主窗口显示到详情区与日志台，**不再偷偷跑体检**；
+  报告窗口标题也从「体检结果」改成「`<工具名>` · 运行结果」，
+  `ResultTable` 标题可配置。
+- **切分类冒出几十个窗口、卡几秒**（用户反馈第二句）。`tak/ui/qt/detail.py`
+  的 `_clear_layout()` 用 `child.setParent(None)` 回收详情区的 QLabel —— Qt 里
+  把 QWidget 的 parent 置空等于**把它提升成顶层窗口**。每切一次分类就有约 40
+  个临时窗口被创建又由 `deleteLater()` 销毁，视觉上就是「一堆弹窗自己消失」，
+  宿主里还要为每个窗口做 QSS 重算，切一次卡几秒。改成 `hide()` +
+  `deleteLater()`，`mayapy + PySide6 offscreen` 实测每次切换新增顶层窗口数
+  **39 → 0**。
+- **工具窗口不留强引用**：`launcher._TOOL_WINDOWS` 原来是纯弱引用字典，没有
+  配套 keepalive。Python wrapper 一被回收缓存就失效，每点一次「打开工具界面」
+  就多造一个窗口。现在加 `_TOOL_KEEPALIVE`，`destroyed` 时精确清理；报告窗口
+  也不再靠「只留最近 8 个、超了 `pop(0)`」管理（旧窗口会因此消失），改为
+  `destroyed` 移除。
+- **分类切换把详情重建两遍**：`_refresh_tool_list()` 里 `setCurrentRow(0)`
+  已经会触发 `currentRowChanged`，后面又显式调一次 `_on_tool_selected(0)`。
+  现在只在 id 真的没更新时补一次，并用 `setUpdatesEnabled(False)` 包住批量重建。
+- **按钮歧义**：详情区的「快速运行」改名为「运行出报告」，两个按钮都加了
+  tooltip，说明「打开工具界面」才是工具自己的窗口。
+
+### 验证
+
+| 项 | 结果 |
+|---|---|
+| `python -m pytest -q` | 全绿（新增 6 条回归） |
+| `validation/qt_tool_ui_check.py`（`mayapy` + PySide6 offscreen，真 Qt） | `ok=true`：5 个工具全部返回各自的 `QMainWindow`、无 `last_open_error`、窗口保活；6 次分类切换 `new_windows=0`、单次 5–14 ms |
+| `validation/qt_category_probe_gui.py`（Maya 2026 GUI，修复前的证据） | 3/5 工具回退成 `ToolResult` + 3 个报告窗口；分类切换 12–34 ms 本身不慢，卡顿来自临时窗口 |
+| `validation/py_compat_smoke.py` / 主题 / fixtures | 见下方常规检查 |
+
+### Known limitations
+
+- **修复后未重跑 `maya.exe` GUI 探针**（GUI 进程退出会僵死，见下条）。修复前的
+  `validation/qt_category_probe_gui.py` 已证明 Maya GUI 下 2 个工具能正常开窗、
+  3 个因 ImportError 回退；修复后用 `mayapy + PySide6 offscreen` 覆盖同一套
+  `ui_qt.show()` 路径，5/5 通过。两者差异只在父窗口挂靠与真实 QSS 绘制耗时，
+  需用户重启 Maya 后目测确认「切换分类不闪窗」。
+- `mayapy` offscreen 不覆盖 `maya.OpenMayaUI` 返回的宿主父窗口。
+- 本机的 Maya 2026 GUI 探针进程退出仍可能僵死（`os._exit(0)` 后进程不结束、
+  `Stop-Process -Force` 也无效），需重启回收。这是宿主 + 第三方插件的问题，
+  不影响已写盘的 JSON 证据。
+
 ## [0.6.0] - 2026-11-14
 
 一句话：**让两条通道真的能用**。0.5.0 把桥和 AI 端点做出来了，但用起来都要先

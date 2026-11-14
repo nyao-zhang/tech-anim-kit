@@ -9,6 +9,8 @@ CI / 开发机通常没有 PySide，本文件重点保证：
 """
 from __future__ import annotations
 
+import ast
+import glob
 import os
 import re
 
@@ -91,3 +93,98 @@ def test_launcher_uses_compat_host_window():
     assert "from tak.compat.qt import" in source
     assert "from PySide2" not in source and "from PySide6" not in source
     assert "import PySide2" not in source and "import PySide6" not in source
+
+
+# --------------------------------------------------------------------------- #
+# v0.6.1：工具界面「打开却变成体检报告」的回归防线
+# --------------------------------------------------------------------------- #
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def test_every_tool_ui_import_is_actually_exported():
+    """工具 ui_qt.py 里 ``from tak.ui.qt import X`` 的名字必须真的存在。
+
+    0.6.0 有三个工具导入了未导出的 ``_theme_path``，ImportError 被 show()
+    自己的 except 吞掉 → 启动器静默回退到通用体检报告。用户看到的就是
+    「很多工具打开还是体检界面」。CI 没有 PySide，只有静态检查能拦住它。
+    """
+    paths = sorted(glob.glob(os.path.join(_REPO_ROOT, "tools", "*", "ui_qt.py")))
+    assert paths, "没有扫到任何工具界面模块"
+    checked = 0
+    for path in paths:
+        with open(path, "r", encoding="utf-8") as handle:
+            tree = ast.parse(handle.read(), filename=path)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or node.module != "tak.ui.qt":
+                continue
+            for alias in node.names:
+                checked += 1
+                assert hasattr(ui, alias.name), (
+                    "%s 导入了 tak.ui.qt 中不存在的 %s" % (path, alias.name))
+    assert checked >= 5
+
+
+def test_public_theme_path_and_result_table_title():
+    assert os.path.isfile(ui.theme_path("dark"))
+    assert ui._theme_path("dark") == ui.theme_path("dark")
+    table = components.ResultTable(title="导出检查 · 运行结果")
+    assert table.set_title("换个标题") is table
+
+
+def test_open_error_is_reported_and_cleared():
+    launcher._LAST_OPEN_ERROR["demo"] = "界面构造失败：ImportError"
+    assert "ImportError" in launcher.last_open_error("demo")
+    assert launcher.last_open_error("other") == ""
+
+
+def test_tool_window_is_kept_alive_until_destroyed():
+    class _FakeWindow(object):
+        def __init__(self):
+            self.callbacks = []
+
+        def destroyed_connect(self, callback):
+            self.callbacks.append(callback)
+
+        @property
+        def destroyed(self):
+            return self
+
+        def connect(self, callback):
+            self.callbacks.append(callback)
+
+    window = _FakeWindow()
+    launcher._remember_tool("__probe__", window)
+    assert launcher._TOOL_KEEPALIVE.get("__probe__") is window
+    assert launcher._TOOL_WINDOWS.get("__probe__") is window
+    for callback in list(window.callbacks):
+        callback()
+    assert "__probe__" not in launcher._TOOL_KEEPALIVE
+
+
+def test_detail_clear_layout_does_not_create_toplevel_windows():
+    """清空详情区时禁止把子控件 setParent(None)（会变成临时顶层窗口）。"""
+    from tak.ui.qt import detail
+
+    source = open(detail.__file__, "r", encoding="utf-8").read()
+    tree = ast.parse(source, filename=detail.__file__)
+    # 用 AST 而不是字符串查找：注释里正好写了这个反例，字符串会误报。
+    offenders = [node for node in ast.walk(tree)
+                 if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Attribute)
+                 and node.func.attr == "setParent"]
+    assert offenders == [], "清空布局时不得把 QWidget 提升成顶层窗口"
+    body = source[source.index("def _clear_layout"):source.index("class ToolDetailPanel")]
+    assert "child.hide()" in body
+    assert "child.deleteLater()" in body
+
+
+def test_own_ui_failure_never_silently_falls_back_to_report():
+    """自带界面失败时不得再跑一遍通用体检冒充工具界面。"""
+    source = open(launcher.__file__, "r", encoding="utf-8").read()
+    assert "has_own_ui" in source
+    assert "last_open_error" in source
+    # 有自带界面但 show() 失败 → 记错误后直接返回 None，且不碰 _fallback_run
+    start = source.index("_LAST_OPEN_ERROR[target] = error")
+    block = source[start:source.index("if discover_error", start)]
+    assert "return None" in block
+    assert "_fallback_run" not in block

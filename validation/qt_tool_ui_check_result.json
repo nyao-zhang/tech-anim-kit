@@ -1,0 +1,97 @@
+{
+  "categories": 6,
+  "category_switch": [
+    {
+      "category": "全部 · 5",
+      "ms": 6.7,
+      "new_windows": 0,
+      "tools": 5
+    },
+    {
+      "category": "通用 · 2",
+      "ms": 11.4,
+      "new_windows": 0,
+      "tools": 2
+    },
+    {
+      "category": "绑定 · 3",
+      "ms": 12.4,
+      "new_windows": 0,
+      "tools": 3
+    },
+    {
+      "category": "动画 · 2",
+      "ms": 12.8,
+      "new_windows": 0,
+      "tools": 2
+    },
+    {
+      "category": "管线 · 1",
+      "ms": 13.7,
+      "new_windows": 0,
+      "tools": 1
+    },
+    {
+      "category": "AI · 3",
+      "ms": 12.4,
+      "new_windows": 0,
+      "tools": 3
+    }
+  ],
+  "has_qt": true,
+  "ok": true,
+  "open_tool": [
+    {
+      "error": "",
+      "id": "mldeformer_factory",
+      "is_report_window": false,
+      "is_tool_window": true,
+      "kept_alive": true,
+      "result": "QMainWindow",
+      "still_alive": true,
+      "title": "TAK · ML Deformer 数据工厂 · maya"
+    },
+    {
+      "error": "",
+      "id": "defect_inspector",
+      "is_report_window": false,
+      "is_tool_window": true,
+      "kept_alive": true,
+      "result": "QMainWindow",
+      "still_alive": true,
+      "title": "VLM 缺陷检查 · maya"
+    },
+    {
+      "error": "",
+      "id": "qa_inspector",
+      "is_report_window": false,
+      "is_tool_window": true,
+      "kept_alive": true,
+      "result": "QMainWindow",
+      "still_alive": true,
+      "title": "场景检查 · maya"
+    },
+    {
+      "error": "",
+      "id": "agent_console",
+      "is_report_window": false,
+      "is_tool_window": true,
+      "kept_alive": true,
+      "result": "QMainWindow",
+      "still_alive": true,
+      "title": "TAK · Agent Console 对话式控制台 · maya"
+    },
+    {
+      "error": "",
+      "id": "asset_pipeline",
+      "is_report_window": false,
+      "is_tool_window": true,
+      "kept_alive": true,
+      "result": "QMainWindow",
+      "still_alive": true,
+      "title": "导出 / 导入 · maya"
+    }
+  ],
+  "qt_binding": "PySide6",
+  "visible_tools": 5
+}

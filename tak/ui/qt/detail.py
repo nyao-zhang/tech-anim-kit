@@ -31,21 +31,37 @@ _NO_FRAME = getattr(getattr(QtWidgets, "QFrame", None), "NoFrame", 0) if HAS_QT 
 
 
 def _clear_layout(layout: Any) -> None:
-    """递归清空布局并 deleteLater，避免反复切换工具时残留控件。"""
+    """递归清空布局并 deleteLater，避免反复切换工具时残留控件。
+
+    **不要** ``child.setParent(None)``：Qt 里把 QWidget 的 parent 置空会把它
+    提升成一个顶层窗口。详情区每次切换要回收几十个 QLabel，于是每切一次
+    分类就凭空冒出几十个临时窗口（闪一下又被 deleteLater 销毁）—— 这就是
+    「切分类卡几秒 + 一堆弹窗自己消失」的来源，在 Maya 这类宿主里尤其慢。
+    正确做法是先 hide 再 deleteLater，让控件作为原子控件正常回收。
+    """
     if layout is None:
         return
     while layout.count():
         item = layout.takeAt(0)
-        child = item.widget() if item is not None else None
-        sub = item.layout() if item is not None else None
+        if item is None:
+            continue
+        child = item.widget()
+        sub = item.layout()
         if child is not None:
-            child.setParent(None)
+            try:
+                child.hide()
+            except Exception:
+                pass
             try:
                 child.deleteLater()
             except Exception:
                 pass
         elif sub is not None:
             _clear_layout(sub)
+            try:
+                sub.deleteLater()
+            except (AttributeError, RuntimeError):
+                pass
 
 
 class ToolDetailPanel(_FrameBase):
@@ -96,11 +112,13 @@ class ToolDetailPanel(_FrameBase):
         self.open_button.setProperty("takPrimary", "true")
         self.open_button.setMinimumHeight(34)
         self.open_button.setMinimumWidth(132)
+        self.open_button.setToolTip("打开这个工具自己的操作窗口（不是体检报告）")
         self.open_button.clicked.connect(self._emit_open)
-        self.run_button = QtWidgets.QPushButton("快速运行")
+        self.run_button = QtWidgets.QPushButton("运行出报告")
         self.run_button.setProperty("takGhost", "true")
         self.run_button.setMinimumHeight(34)
         self.run_button.setMinimumWidth(96)
+        self.run_button.setToolTip("不打开工具窗口，按通用契约跑一遍并把结论填进「结果」页")
         self.run_button.clicked.connect(self._emit_run)
         footer_layout.addWidget(self.status_label, 1)
         footer_layout.addWidget(self.run_button, 0)

@@ -15,6 +15,7 @@ from .components import (
     StatusBar,
     ToolCard,
     ToolMainWindow,
+    _theme_path,
     create_diff_preview,
     create_log_console,
     create_main_window,
@@ -23,11 +24,19 @@ from .components import (
     create_tool_card,
 )
 from .detail import ToolDetailPanel
-from .launcher import launch, open_settings, open_tool, show_report
+from .launcher import launch, last_open_error, open_settings, open_tool, show_report
+
+
+def theme_path(name: str = "dark") -> str:
+    """公开的 QSS 主题路径入口；插件不该依赖带下划线的私有名。"""
+    return _theme_path(name)
+
 
 __all__ = [
     "HAS_QT",
     "THEME_FILES",
+    "theme_path",
+    "_theme_path",
     "DiffPreview",
     "LogConsole",
     "ResultTable",
@@ -42,6 +51,7 @@ __all__ = [
     "create_status_bar",
     "create_tool_card",
     "launch",
+    "last_open_error",
     "open_settings",
     "open_tool",
     "show_report",
