@@ -88,14 +88,20 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
 
     # 连接区：桥接（WorkBuddy → DCC）与 AI 端点（DCC → WorkBuddy）是两条独立通道，
     # 分开摆在同一行，避免用户以为「连不上 AI 就不能让外部调工具」。
+    #
+    # 桥接做成**一行开关**：点一下就起/停，不用先进对话框。对话框只留「详情」，
+    # 因为用户要的是「我要开这个端口」，而不是「先读一段说明再找按钮」。
     connect_row = QtWidgets.QHBoxLayout()
     connect_row.setSpacing(8)
     bridge_label = QtWidgets.QLabel("桥接：未启动")
     bridge_label.setProperty("takMuted", "true")
-    bridge_button = QtWidgets.QPushButton("桥接设置")
+    bridge_toggle = QtWidgets.QPushButton("启动桥接")
+    bridge_toggle.setProperty("takPrimary", "true")
+    bridge_detail = QtWidgets.QPushButton("详情")
     ai_button = QtWidgets.QPushButton("AI 连接")
     connect_row.addWidget(bridge_label, 1)
-    connect_row.addWidget(bridge_button, 0)
+    connect_row.addWidget(bridge_toggle, 0)
+    connect_row.addWidget(bridge_detail, 0)
     connect_row.addWidget(ai_button, 0)
 
     # 候选 / 报告视图 + 对话日志
@@ -116,7 +122,7 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     status.set_status("就绪")
 
     core = _plugin_core()
-    state = {"snapshot": {}, "last": None}
+    state = {"snapshot": {}, "last": None, "bridge_error": ""}
 
     def _on_send() -> None:
         text = line_edit.text().strip()
@@ -158,12 +164,62 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
             status = bridge.bridge_status()
         except Exception as exc:
             bridge_label.setText("桥接：状态读取失败（%s）" % type(exc).__name__)
+            bridge_toggle.setText("启动桥接")
+            bridge_toggle.setEnabled(False)
             return
+        bridge_toggle.setEnabled(True)
         if status.get("running"):
-            bridge_label.setText("桥接：%s · %s" % (
-                status.get("url", ""), status.get("owner", "")))
+            bridge_label.setText("桥接：%s" % (status.get("url") or "运行中"))
+            bridge_toggle.setText("停止")
         else:
-            bridge_label.setText("桥接：未启动")
+            bridge_label.setText("桥接：未启动（外部调不进来）")
+            bridge_toggle.setText("启动桥接")
+
+    def _toggle_bridge() -> None:
+        """一行开关：运行中就停，没运行就起。失败原因写进日志台。
+
+        注意变量命名：这里**不能**用 ``status`` 承接 ``bridge_status()`` 的结果，
+        它会把外层状态栏对象 ``status`` 遮蔽掉，于是 ``status.set_status(...)``
+        打在 dict 上抛 AttributeError —— 而 Qt 会把槽函数里的异常吞掉，界面上
+        表现为「点了没反应」。真机探针第一次就是这么抓到它的。
+        """
+        try:
+            from tak.core import bridge
+        except Exception as exc:
+            log_console.error("桥接模块不可用: %s: %s" % (type(exc).__name__, exc))
+            return
+        try:
+            current = bridge.bridge_status()
+            if current.get("running"):
+                payload = bridge.stop_bridge()
+                if payload.get("ok"):
+                    log_console.append("桥接已停止（端口 %s）" % payload.get("port"),
+                                       "info")
+                    status.set_status("桥接已停止")
+                else:
+                    log_console.error("桥接停止失败：%s" % payload.get("error"))
+                _refresh_bridge_label()
+                return
+
+            payload = bridge.start_bridge(dcc=dcc)
+            if payload.get("ok"):
+                log_console.append("桥接已启动：%s" % payload.get("url"), "info")
+                status.set_status("桥接运行中 · %s" % payload.get("url"))
+                if not payload.get("thread_safe"):
+                    # 不致命，但会让外部调用在高负载时超时，必须说出来。
+                    log_console.append(
+                        "提示：%s" % (payload.get("thread_note")
+                                      or "宿主未注册主线程执行器，外部调用可能不稳定"),
+                        "warn")
+            else:
+                log_console.error("桥接启动失败：%s" % payload.get("error"))
+                status.set_status("桥接启动失败")
+        except Exception as exc:
+            # 槽函数里的异常绝不能只留给 Qt 吞 —— 用户会以为按钮坏了。
+            state["bridge_error"] = "%s: %s" % (type(exc).__name__, exc)
+            log_console.error("桥接操作失败：%s" % state["bridge_error"])
+            status.set_status("桥接操作失败")
+        _refresh_bridge_label()
 
     def _open_bridge() -> None:
         try:
@@ -179,7 +235,8 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
             log_console.error("AI 连接设置打开失败: %s: %s"
                               % (type(exc).__name__, exc))
 
-    bridge_button.clicked.connect(_open_bridge)
+    bridge_toggle.clicked.connect(_toggle_bridge)
+    bridge_detail.clicked.connect(_open_bridge)
     ai_button.clicked.connect(_open_ai)
     _refresh_bridge_label()
 
@@ -194,6 +251,12 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     window._agent_input = line_edit
     window._agent_core = core
     window._agent_refresh_bridge = _refresh_bridge_label
+    window._agent_toggle_bridge = _toggle_bridge
+    window._agent_open_ai = _open_ai
+    window._agent_open_bridge = _open_bridge
+    window._agent_bridge_label = bridge_label
+    window._agent_bridge_toggle = bridge_toggle
+    window._agent_bridge_error = lambda: state["bridge_error"]
     window.show()
     return window
 
@@ -302,110 +365,274 @@ def _bridge_dialog(QtWidgets: Any, parent: Any, dcc: str, log_console: Any,
 
 
 # --------------------------------------------------------------------------- #
-# AI 连接设置
+# AI 连接向导
 # --------------------------------------------------------------------------- #
 def _ai_dialog(QtWidgets: Any, parent: Any, log_console: Any,
                status_bar: Any) -> Any:
-    """AI 端点设置：base_url / 模型 / 密钥环境变量名，外加一次真实探测。"""
+    """AI 端点向导：选服务商 → 粘贴密钥 → 测试。三步之内能用。
+
+    设计取舍：旧版让人填 ``base_url`` / 模型 / **密钥环境变量名**，等于要求
+    用户先去系统属性里建环境变量、再重启 DCC —— 实际结果是没人配得动。
+    这一版把密钥直接收在这里，存进 ``~/.tak/credential.json``（权限收到当前
+    用户），不用改系统设置、不用重启。
+    """
     from tak.core import config as tak_config
-    from tak.core.ai import connection
+    from tak.core.ai import connection, credential
 
     dialog = QtWidgets.QDialog(parent)
-    dialog.setWindowTitle("TAK · AI 连接（对话侧走哪个端点）")
-    dialog.resize(660, 380)
+    dialog.setWindowTitle("TAK · AI 连接（DCC 侧走哪个模型端点）")
+    dialog.resize(760, 620)
     layout = QtWidgets.QVBoxLayout(dialog)
     layout.setContentsMargins(16, 16, 16, 16)
     layout.setSpacing(10)
 
     intro = QtWidgets.QLabel(
-        "填任何 OpenAI 兼容端点即可（WorkBuddy 网关 / 自建代理 / 官方 API）。\n"
-        "密钥不写进配置文件：只填**环境变量名**，值放在系统环境变量里。")
+        "只有「解释 / 生成修复计划」这类步骤需要它，所有判定仍走确定性规则。\n"
+        "密钥存进本机凭据文件（不进 config.json、不进 git）；系统环境变量优先级更高。")
     intro.setWordWrap(True)
     intro.setProperty("takMuted", "true")
 
+    # ---------------------------------------------------------------- 服务商
+    preset_row = QtWidgets.QHBoxLayout()
+    preset_row.setSpacing(8)
+    preset_box = QtWidgets.QComboBox()
+    for item in connection.PRESETS:
+        preset_box.addItem(item["name"], item["id"])
+    key_page_button = QtWidgets.QPushButton("去申请密钥")
+    preset_row.addWidget(QtWidgets.QLabel("服务商"))
+    preset_row.addWidget(preset_box, 1)
+    preset_row.addWidget(key_page_button, 0)
+
+    note_label = QtWidgets.QLabel("")
+    note_label.setWordWrap(True)
+    note_label.setProperty("takMuted", "true")
+
     form = QtWidgets.QFormLayout()
     base_edit = QtWidgets.QLineEdit()
-    base_edit.setPlaceholderText("https://your-gateway/v1")
-    model_edit = QtWidgets.QLineEdit()
-    model_edit.setPlaceholderText("DeepSeek-V4.1-Flash")
-    key_env_edit = QtWidgets.QLineEdit()
-    key_env_edit.setPlaceholderText("TAK_AI_API_KEY")
+    base_edit.setPlaceholderText("https://api.deepseek.com")
+    model_box = QtWidgets.QComboBox()
+    model_box.setEditable(True)
+    model_box.setInsertPolicy(QtWidgets.QComboBox.NoInsert)
+    model_box.lineEdit().setPlaceholderText("留空 = 让端点自己给一个")
+    key_edit = QtWidgets.QLineEdit()
+    key_edit.setEchoMode(QtWidgets.QLineEdit.Password)
+    key_edit.setPlaceholderText("粘贴 API key（sk-…）；本地 Ollama 随便填")
     form.addRow("端点 base_url", base_edit)
-    form.addRow("模型", model_edit)
-    form.addRow("密钥环境变量", key_env_edit)
+    form.addRow("模型", model_box)
+    form.addRow("密钥", key_edit)
+
+    key_state = QtWidgets.QLabel("")
+    key_state.setWordWrap(True)
+    key_state.setProperty("takMuted", "true")
+    remember = QtWidgets.QCheckBox("保存到本机凭据文件（推荐：不用改系统环境变量）")
+    remember.setChecked(True)
 
     output = QtWidgets.QPlainTextEdit()
     output.setReadOnly(True)
-    output.setMinimumHeight(120)
+    output.setMinimumHeight(160)
 
-    save_button = QtWidgets.QPushButton("保存")
-    save_button.setProperty("takPrimary", "true")
     test_button = QtWidgets.QPushButton("测试连接")
+    test_button.setProperty("takPrimary", "true")
+    save_button = QtWidgets.QPushButton("保存")
+    fetch_button = QtWidgets.QPushButton("拉取模型列表")
+    forget_button = QtWidgets.QPushButton("清除已存密钥")
     close_button = QtWidgets.QPushButton("关闭")
     buttons = QtWidgets.QHBoxLayout()
-    buttons.addWidget(save_button)
     buttons.addWidget(test_button)
+    buttons.addWidget(save_button)
+    buttons.addWidget(fetch_button)
+    buttons.addWidget(forget_button)
     buttons.addStretch(1)
     buttons.addWidget(close_button)
+
+    state = {"key_env": connection.DEFAULT_KEY_ENV, "key_url": ""}
+
+    # ---------------------------------------------------------------- 内部
+    def _print(payload: dict) -> None:
+        source = str(payload.get("api_key_source") or "none")
+        source_text = {
+            "env": "环境变量 %s" % (payload.get("api_key_env_used")
+                                   or payload.get("api_key_env")),
+            "file": "本机凭据文件",
+            "override": "本次输入（尚未保存）",
+            "none": "无",
+        }.get(source, source)
+        # probe() 的结果里没有 ready 字段：一次成功的最小请求就等于「能用」。
+        ready = payload.get("ready")
+        if ready is None:
+            ready = payload.get("ok")
+        lines = [
+            "就绪：%s" % ("是" if ready else "否"),
+            "端点：%s（来源 %s）" % (payload.get("base_url"),
+                                  payload.get("base_url_source")),
+            "模型：%s" % (payload.get("model") or "(按任务路由)"),
+            "密钥来源：%s" % source_text,
+            "提示：%s" % payload.get("hint"),
+        ]
+        for key, label in (("latency_ms", "耗时(ms)"), ("status", "HTTP"),
+                           ("model_source", "模型来源"), ("reply", "回复"),
+                           ("error", "错误")):
+            if payload.get(key) not in (None, "", 0):
+                lines.append("%s：%s" % (label, payload[key]))
+        available = payload.get("available_models") or []
+        if available:
+            lines.append("")
+            lines.append("这个端点可用的模型：")
+            lines.extend("  " + name for name in available[:20])
+        output.setPlainText("\n".join(lines))
+
+    def _refresh_key_state() -> None:
+        described = credential.describe()
+        found = connection.detected_env_keys()
+        parts = []
+        if found:
+            parts.append("环境变量里已发现：%s" % "、".join(
+                "%s(%s)" % (item["name"], item["tail"]) for item in found))
+        if described.get("present"):
+            parts.append("本机凭据文件已存：%s（%s）" % (
+                described.get("tail"), described.get("saved_at")))
+        if not parts:
+            parts.append("还没有可用密钥 —— 在上面粘贴一个，再点「测试连接」")
+        key_state.setText(" · ".join(parts))
+        forget_button.setEnabled(bool(described.get("present")))
+
+    def _apply_preset(preset_id: str, fill_fields: bool = True) -> None:
+        item = connection.preset(preset_id)
+        state["key_env"] = item.get("key_env") or connection.DEFAULT_KEY_ENV
+        state["key_url"] = item.get("key_url") or ""
+        note_label.setText(item.get("note") or "")
+        key_page_button.setEnabled(bool(state["key_url"]))
+        if fill_fields:
+            base_edit.setText(item.get("base_url") or "")
+            model_box.setCurrentText(item.get("model") or "")
 
     def _load() -> None:
         data = tak_config.load()
         ai = data.get("ai") or {}
-        base_edit.setText(str(ai.get("base_url") or ""))
-        model_edit.setText(str(ai.get("model") or ""))
-        key_env_edit.setText(str(ai.get("api_key_env") or "TAK_AI_API_KEY"))
+        base = str(ai.get("base_url") or "")
+        base_edit.setText(base)
+        model_box.setCurrentText(str(ai.get("model") or ""))
+        preset_id = connection.detect_provider(base) or "deepseek"
+        index = preset_box.findData(preset_id)
+        if index >= 0:
+            preset_box.setCurrentIndex(index)
+        # 已经配过地址就别用预设覆盖它 —— 用户改过的值优先。
+        _apply_preset(preset_id, fill_fields=not bool(base))
+        _refresh_key_state()
         _print(connection.describe(data))
 
-    def _print(payload: dict) -> None:
-        lines = ["就绪：%s" % ("是" if payload.get("ready") else "否"),
-                 "端点：%s（来源 %s）" % (payload.get("base_url"),
-                                       payload.get("base_url_source")),
-                 "模型：%s" % payload.get("model"),
-                 "密钥变量：%s（%s）" % (payload.get("api_key_env"),
-                                     "已设置" if payload.get("api_key_present")
-                                     else "未设置"),
-                 "提示：%s" % payload.get("hint")]
-        for key, label in (("latency_ms", "耗时(ms)"), ("status", "HTTP"),
-                           ("reply", "回复"), ("error", "错误")):
-            if payload.get(key) not in (None, "", 0):
-                lines.append("%s：%s" % (label, payload[key]))
-        output.setPlainText("\n".join(lines))
-
-    def _save() -> None:
-        data = tak_config.load()
-        ai = dict(data.get("ai") or {})
-        ai["base_url"] = base_edit.text().strip()
-        ai["model"] = model_edit.text().strip()
-        ai["api_key_env"] = key_env_edit.text().strip() or "TAK_AI_API_KEY"
-        data["ai"] = ai
-        tak_config.save(data)
-        log_console.append("AI 连接设置已保存到 %s" % tak_config.config_path(),
-                           "info")
-        status_bar.set_status("AI 连接设置已保存")
-        _print(connection.describe())
+    def _overrides() -> dict:
+        overrides = {"base_url": base_edit.text().strip(),
+                     "model": model_box.currentText().strip()}
+        typed = key_edit.text().strip()
+        if typed:
+            overrides["api_key"] = typed
+        return overrides
 
     def _test() -> None:
         status_bar.set_status("正在测试 AI 连接…")
-        payload = connection.probe(timeout=10)
+        payload = connection.probe(timeout=12, overrides=_overrides())
         _print(payload)
         if payload.get("ok"):
-            log_console.append("AI 连接正常（%s ms）" % payload.get("latency_ms"),
-                               "info")
-            status_bar.set_status("AI 连接正常")
+            log_console.append("AI 连接正常（%s ms，模型 %s）" % (
+                payload.get("latency_ms"), payload.get("model")), "info")
+            status_bar.set_status("AI 连接正常 · %s" % payload.get("model"))
         else:
             log_console.error("AI 连接失败：%s" % payload.get("error"))
             status_bar.set_status("AI 连接失败")
 
-    save_button.clicked.connect(_save)
+    def _save() -> None:
+        result = connection.save_endpoint(
+            base_edit.text().strip(), model_box.currentText().strip(),
+            api_key_env=state["key_env"])
+        if not result.get("ok"):
+            log_console.error("端点保存失败：%s" % result.get("error"))
+            return
+        typed = key_edit.text().strip()
+        if typed and remember.isChecked():
+            saved = credential.save(typed, provider=preset_box.currentData() or "")
+            if not saved.get("ok"):
+                log_console.error("密钥保存失败：%s" % saved.get("error"))
+            else:
+                key_edit.clear()
+                if saved.get("short"):
+                    log_console.append(
+                        "注意：密钥长度偏短，若端点要求正式 key 请再确认一次。", "warn")
+        log_console.append("AI 连接设置已保存（%s）" % tak_config.config_path(),
+                           "info")
+        status_bar.set_status("AI 连接设置已保存")
+        _refresh_key_state()
+        _print(connection.describe())
+
+    def _fetch_models() -> None:
+        status_bar.set_status("正在向端点询问模型列表…")
+        payload = connection.list_models(
+            base_url=base_edit.text().strip(),
+            api_key=key_edit.text().strip() or None, timeout=12)
+        if not payload.get("ok"):
+            output.setPlainText("拉取失败：%s\nHTTP：%s" % (
+                payload.get("error"), payload.get("status")))
+            status_bar.set_status("拉取模型列表失败")
+            return
+        names = payload.get("models") or []
+        current = model_box.currentText()
+        model_box.clear()
+        model_box.addItems(names)
+        if current:
+            model_box.setCurrentText(current)
+        output.setPlainText("端点返回 %d 个模型：\n%s" % (
+            len(names), "\n".join("  " + name for name in names[:60])))
+        status_bar.set_status("拉取到 %d 个模型，可在「模型」下拉里选" % len(names))
+
+    def _forget() -> None:
+        payload = credential.clear()
+        if payload.get("ok"):
+            log_console.append("已清除本机凭据文件里的密钥", "info")
+            status_bar.set_status("已清除已保存的密钥")
+        else:
+            log_console.error("清除失败：%s" % payload.get("error"))
+        _refresh_key_state()
+
+    def _open_key_page() -> None:
+        if not state["key_url"]:
+            return
+        try:
+            from tak.compat.qt import QtGui
+            QtGui.QDesktopServices.openUrl(QtGui.QUrl(state["key_url"]))
+        except Exception as exc:
+            log_console.append("打开浏览器失败，请手动访问：%s（%s）" % (
+                state["key_url"], type(exc).__name__), "warn")
+
+    preset_box.currentIndexChanged.connect(
+        lambda index: _apply_preset(preset_box.itemData(index) or "custom"))
     test_button.clicked.connect(_test)
+    save_button.clicked.connect(_save)
+    fetch_button.clicked.connect(_fetch_models)
+    forget_button.clicked.connect(_forget)
+    key_page_button.clicked.connect(_open_key_page)
     close_button.clicked.connect(dialog.accept)
 
     layout.addWidget(intro)
+    layout.addLayout(preset_row)
+    layout.addWidget(note_label)
     layout.addLayout(form)
+    layout.addWidget(key_state)
+    layout.addWidget(remember)
     layout.addWidget(output, 1)
     layout.addLayout(buttons)
+
+    # 暴露给回归测试（不点按钮也能断言控件状态）
     dialog._refresh = _load
     dialog._test = _test
+    dialog._save = _save
+    dialog._forget = _forget
+    dialog._fetch = _fetch_models
+    dialog._preset_box = preset_box
+    dialog._base_edit = base_edit
+    dialog._model_box = model_box
+    dialog._key_edit = key_edit
+    dialog._remember = remember
+    dialog._output = output
     _load()
     dialog.show()
     return dialog

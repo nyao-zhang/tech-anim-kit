@@ -16,10 +16,19 @@
 
 | 入口 | 操作 |
 |---|---|
-| Maya 菜单 | 未挂菜单。`MENU_ITEMS` 只有「打开面板 / 场景体检 / 规范校验 / 导出校验 / 动作检索 / Web 面板 / 关于 TAK」，没有本项；先进「打开面板」再切「对话候选」 |
+| Maya 菜单 | TAK → 打开面板 → 分类「AI」→「对话式控制台」（菜单本身只有「打开面板 / 设置 / 关于 TAK」三项） |
 | Python | 见下 |
 | Web 面板 | 页签 `data-tab="chat"`（标题「对话候选」）；深链 `?tab=chat` |
 | HTTP API | `POST /api/agent`。仓里**没有** `/api/chat` 路由，聊天是 `/api/agent` 的 `action=chat` |
+
+窗口底部有一行「连接区」，两条通道各自独立：
+
+| 控件 | 作用 |
+|---|---|
+| `桥接：未启动（外部调不进来）　[启动桥接]` | 点一下起本地桥，再点是停；地址直接显示在标签上。要 token、发现文件路径和 curl 示例时点「详情」 |
+| `[AI 连接]` | 三步向导：选服务商 → 粘密钥 → 测试连接。密钥存 `~/.tak/credential.json`，不进 `config.json` |
+
+两者互不依赖：不开 AI 也能让外部调工具；不开桥也能本地用 mock 对话。
 
 ```python
 from tools.agent_console import core

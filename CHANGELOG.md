@@ -13,6 +13,83 @@
 
 （无）
 
+## [0.6.0] - 2026-11-14
+
+一句话：**让两条通道真的能用**。0.5.0 把桥和 AI 端点做出来了，但用起来都要先
+读一段说明、进一个对话框、再配一次系统环境变量 —— 于是实际状态是「有功能，
+没人用」。这一版只改可达性。
+
+### Added
+
+- **`tak/core/ai/credential.py` 本机凭据文件**（`~/.tak/credential.json`）：
+  密钥单独存、权限收到当前用户（POSIX `chmod 600`，Windows `icacls /inheritance:r`），
+  面板里可一键清除。这样不必为了用 AI 去「系统属性 → 环境变量」建条目并重启 DCC。
+  读取永不抛异常（坏 JSON 当作没有凭据），写入原子替换。
+- **供应商预设 `connection.PRESETS`**：DeepSeek / Kimi / 百炼 / 智谱 / 硅基流动 /
+  OpenAI / 本地 Ollama / 自定义。选中即填好 `base_url`、模型、密钥变量名与申请地址。
+  DeepSeek 预设用 `deepseek-v4-flash`（`deepseek-chat` / `deepseek-reasoner`
+  已于 2026-07-24 弃用，照旧文档填会 404）。
+- **`connection.list_models()`**：问端点 `GET /models` 拿真实可用的模型名。
+  `probe()` 在模型为空时先问端点再请求；404 时把该端点真实可用的名字列进提示，
+  而不是只丢一句「模型名不对」。
+- **`probe(overrides=...)`**：面板里改了地址/密钥，**不必先保存**就能测试。
+- **`connection.apply_preset()` / `save_endpoint()`**：只写地址类配置，**不写密钥**。
+- **桥接一行开关**：对话控制台底部直接显示「桥接：未启动（外部调不进来）　
+  [启动桥接]　[详情]　[AI 连接]」，点一下起、再点停，地址实时反映在标签上。
+  对话框降级为「详情」，只放 token、发现文件路径和 curl 示例。
+- **AI 连接三步向导**：「服务商 → 粘密钥 → 测试」。附「拉取模型列表」「清除已存密钥」
+  「去申请密钥」（直接打开对应平台）。
+
+### Changed
+
+- **`get_provider()` 的密钥取值与 `probe()` 同源**：都走 `resolve_settings()`。
+  以前 `probe` 能过而真实对话回落到 mock，就是因为两处各自拼了一遍取值逻辑。
+- **`DEFAULT_BASE_URL` 从 `https://api.openai.com/v1` 改为 `https://api.deepseek.com`**：
+  国内直连 OpenAI 通常不通，默认值指向一个连不上的地址只会制造「配了也不通」。
+- **`describe()` 不再返回密钥字段**：它的结果会被写进日志和 JSON。
+- **README 的 AI 章节重写**：从「设四个环境变量」改成「面板里点三下」，并列出三种
+  设置方式的优先级。顺带删掉引用已删除模块 `tak.core.motion` 的示例代码，以及
+  「Web 工作台五个页签」这类 0.4.0 之后就不再成立的说法。
+
+### Fixed
+
+- **点「启动桥接」没反应**（真机探针抓到）：槽函数里用 `status` 承接
+  `bridge_status()` 的结果，遮蔽了外层状态栏对象，于是 `status.set_status(...)`
+  打在 dict 上抛 `AttributeError` —— 而 Qt 会把槽函数里的异常吞掉，界面表现就是
+  「按钮点了没用」，桥其实已经起来了。现在变量改名，并给整个槽加兜底：任何异常
+  都写进日志台和 `state["bridge_error"]`，不再交给 Qt 静默吞掉。
+- **向导永远显示「就绪：否」**：`probe()` 的返回里没有 `ready` 字段，界面读不到就
+  当作未就绪。现在回落看 `ok`（一次成功的最小请求就等于能用）。
+- **`DEEPSEEK_API_KEY` 等常见变量名不被识别**：以前只查配置里指定的那一个名字。
+  现在按 `KNOWN_KEY_ENVS` 兜底扫描，并把真实命中的变量名报出来，避免「我明明配了
+  它却说没有密钥」。
+
+### Known limitations
+
+- **预设里的模型名是初值不是真理**：各家改名很快，只能靠 `/models` 兜底。
+  端点若不实现 `GET /models`（部分自建网关），仍会得到 404，此时只能手填模型名。
+- **Windows 上的权限收紧依赖 `icacls`**：受管机器若禁止改 ACL，保存仍会成功但权限
+  未收，`describe()["permissions"]` 会如实报 `windows-acl` 而不是假装已收紧。
+- **桥仍然默认不自启**：`bridge.autostart` 默认 `false`。一个监听端口不该自己起来，
+  要开就点一下。
+- **向导不做密钥有效性预校验**：粘贴什么就存什么，是否有效由「测试连接」回答。
+- **真机探针在这台机器上退出不干净**：`cmds.quit(force=True)` 会卡在退出流程里不返回，
+  换 Python 线程做看门狗也不行（主线程卡在 C 扩展时不释放 GIL，看门狗拿不到执行权），
+  最后改成写盘后直接 `os._exit(0)`；即便如此，装了大量第三方插件的 Maya 仍会留下
+  单线程残留进程（CPU 不增长、`taskkill` 报「没有此任务的实例在运行」，只能重启回收）。
+  证据文件是完整的，所以不影响验证结论；清理残留进程需要手工或重启。
+
+### 验证
+
+| 项 | 结果 |
+|---|---|
+| `python -m pytest -q` | exit=0 全绿（新增 `tests/test_ai_credential.py` 24 条） |
+| `validation/py_compat_smoke.py` | PASS（Python 3.9 语法/API 检查） |
+| `generate_theme --check` / `generate_fixtures --check` | 一致 / 40 个一致 |
+| Maya 2026 GUI 面板探针 | `bridge_toggle.ok=true`（起点→启动→停止，标签与按钮文字同步）；`ai_wizard.ok=true`（8 个预设、选 DeepSeek 自动填 `api.deepseek.com` + `deepseek-v4-flash`、测试通过、保存后密钥进凭据文件且 `config.json` 不含密钥、清除干净） |
+
+---
+
 ## [0.5.0] - 2026-11-15
 
 把「工具集」接上外部世界。0.4.0 解决了「工具怎么组织」，这一版解决
@@ -430,6 +507,7 @@ Finding 表，各工具自带的 `ui_qt.show()` 从来没有被调用过；`mani
 ---
 
 [Unreleased]: #unreleased
+[0.6.0]: #060---2026-11-14
 [0.5.0]: #050---2026-11-15
 [0.3.3]: #033---2026-11-14
 [0.3.2]: #032---2026-11-14

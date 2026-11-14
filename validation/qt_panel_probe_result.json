@@ -2,8 +2,27 @@
   "ai_connection": {
     "api_key_env": "TAK_AI_API_KEY",
     "base_url_source": "default",
-    "hint": "缺少密钥：请设置环境变量 TAK_AI_API_KEY（配置里只存变量名，不存密钥）",
+    "hint": "没有可用密钥：可在「AI 连接」里填入并保存到本机凭据文件，或设置环境变量 TAK_AI_API_KEY",
     "ready": false
+  },
+  "ai_wizard": {
+    "cleared": true,
+    "config_base_url": "http://127.0.0.1:64082/v1",
+    "config_leaks_secret": false,
+    "config_model": "probe-model",
+    "has_widgets": true,
+    "key_field_cleared": true,
+    "ok": true,
+    "preset_base": "https://api.deepseek.com",
+    "preset_model": "deepseek-v4-flash",
+    "presets_expected": 8,
+    "presets_in_ui": 8,
+    "saved_after_click": true,
+    "saved_before_click": false,
+    "saved_tail": "…3456",
+    "test_from_file": true,
+    "test_ok": true,
+    "test_output": "就绪：是\n端点：http://127.0.0.1:64082/v1（来源 override）\n模型：probe-model\n密钥来源：本次输入（尚未保存）\n提示：连接正常。对话控制台的解释与候选会走这个端点（模型 probe-model）。\n耗时(ms)：6.0\nHTTP：200\n模型来源：override\n回复：pong"
   },
   "bridge_status": {
     "endpoints": [
@@ -14,6 +33,20 @@
       "POST /bridge/chat    {message, session_id?}"
     ],
     "running": false
+  },
+  "bridge_toggle": {
+    "error_detail": "",
+    "label_after_start": "桥接：http://127.0.0.1:64074",
+    "label_before": "桥接：未启动（外部调不进来）",
+    "ok": true,
+    "running_after_start": true,
+    "running_after_stop": false,
+    "running_before": false,
+    "text_after_start": "停止",
+    "text_after_stop": "启动桥接",
+    "text_before": "启动桥接",
+    "thread_safe": true,
+    "url": "http://127.0.0.1:64074"
   },
   "categories": [
     "全部 · 5",
@@ -153,6 +186,6 @@
     "绑定 · 3": 3,
     "通用 · 2": 2
   },
-  "version": "0.5.0",
+  "version": "0.6.0",
   "window_created": true
 }

@@ -2,7 +2,9 @@
 
 跨 DCC 技术动画工具集，面向 **Maya 2023+ / 3ds Max 2023+ / MotionBuilder 2023+ / Unreal Engine 5.8–5.9**。
 
-> 当前版本 `0.5.0`（**外部接入**：本地桥 + AI 端点 + 第三方工具导入）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
+> 当前版本 `0.6.0`（**连通性收口**：桥接一行开关 + AI 端点三步向导 + 本机凭据文件）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
+>
+> v0.6.0 只解决一件事：**让两条通道真的能用**。桥接从「进对话框再找按钮」变成底部一行开关（点一下起、再点停，地址直接显示）；AI 端点从「去系统属性建环境变量再重启 DCC」变成面板里三步（选服务商 → 粘密钥 → 测试），密钥存 `~/.tak/credential.json` 且权限收到当前用户。模型名填错时它会问端点 `GET /models` 把真实可用的名字列出来。
 >
 > v0.5.0 打通两条通道：**外部能调 DCC**（`127.0.0.1` 本地桥，token 鉴权，只读为主），**DCC 能连 AI**（任何 OpenAI 兼容端点，密钥只存环境变量名），并支持**导入第三方 .py 工具**（ast 只读分析 → 生成 manifest → 装进面板）。场景卫生 9 条规则也第一次在真 Maya 里有数据。详见 [变更日志](CHANGELOG.md) 第 0.5.0 节。
 >
@@ -167,12 +169,23 @@ print(report.passed, report.counts(), report.to_markdown())
 
 ## AI provider
 
-默认离线，无需密钥即可跑通全部测试；启用真实调用时设置：
+默认离线，无需密钥即可跑通全部测试。要真连，**最省事的是在面板里点三下**：
+
+> 对话控制台 → AI 连接 → 选服务商 → 粘贴密钥 → 测试连接 → 保存
+
+密钥存进 `~/.tak/credential.json`（权限收到当前用户），**不进 `config.json`**，
+所以把配置发给同事不会泄露凭据；也不用改系统环境变量、不用重启 DCC。
+「去申请密钥」按钮直接打开对应平台；模型名填错时点「拉取模型列表」，它会去问
+端点 `GET /models` 把真实可用的名字列出来。
+
+三种设置密钥的方式，优先级从高到低：
 
 ```bash
-TAK_AI_OFFLINE=0
-TAK_AI_API_KEY=...
-TAK_AI_BASE_URL=https://api.openai.com/v1   # 或任意 OpenAI 兼容端点
+# 1) 环境变量（CI / 临时切换；优先级最高）
+TAK_AI_API_KEY=...                          # 或 DEEPSEEK_API_KEY 等常见名，会被自动识别
+TAK_AI_BASE_URL=https://api.deepseek.com    # 任何 OpenAI 兼容端点
+# 2) 面板里粘贴 → 写进 ~/.tak/credential.json
+# 3) ~/.tak/config.json 的 ai.base_url / ai.model（只有地址，没有密钥）
 ```
 
 `provider_for_task("explain" | "complex" | "vision")` 分别返回 DeepSeek-V4.1-Flash / Kimi-K3.1-Pro / MiniMax-M3.1-Flash；缺密钥自动降级为确定性离线实现。**边界**：确定性判定一律走 `tak.core.rules`；AI 只解释、生成候选、打标、诊断，不参与判定。会话级模型切换由使用者在界面完成，本模块不切换当前会话模型。
@@ -191,23 +204,12 @@ print(s.confirm(plan["plan_id"], confirm=False))    # 默认 dry-run
 print(s.confirm(plan["plan_id"], confirm=True, granted=["node.write"]))  # 显式授权 + 二次确认才写
 ```
 
-服务端同样是硬门：`/api/agent` 只在 `confirm is True and dry_run is False and "node.write" in granted` 三项同时成立时才真正执行，否则一律退化为 dry-run。Web 工作台五个页签分别对应 `/api/agent`（chat/plan/confirm）、`/api/knowledge`（GET 状态 / POST 检索）、`/api/vision`（抽帧诊断）、`/api/mapping`（骨骼语义映射）、`/api/motion`（动作语义检索）。
+服务端同样是硬门：`/api/agent` 只在 `confirm is True and dry_run is False and "node.write" in granted` 三项同时成立时才真正执行，否则一律退化为 dry-run。Web 工作台现存三个页签：/api/agent（对话候选）、/api/knowledge（规范检索）、/api/vision（抽帧诊断）—— 骨骼映射与动作语义检索随对应工具在 0.4.0 移除，接口一并删除。
 
-### 动作语义检索（P6.1）
+### 动作语义检索（已移除）
 
-```python
-from tak.core.motion import MotionLibrary
-
-lib = MotionLibrary()                                  # 12 个内置示例 clip，全离线
-hits = lib.search("走路 循环", top_k=5)                  # 文本分 + 类型加权
-hits = lib.search("", options={"filters": {"loopable": True,
-                                           "min_duration": 0.8}})   # 空查询 = 列出全部
-print(hits[0]["why"])                                  # 中文解释：命中了哪些词、为什么排第一
-lib.similar_to("walk_fwd_01", top_k=3)                 # 基于特征向量的相似动作
-```
-
-**不解析 FBX 二进制**：特征来自同名 sidecar 或文件名启发式；后者会标 `features["estimated"]=1.0`，
-不会假装那是精确值。检索结果完全可复现（score 降序 → clip_id 升序），不写缓存。
+tak.core.motion 与动作库工具在 0.4.0 一起删除：动作检索已有成熟替代品，
+重建一套没有意义。本节保留标题只为让旧链接不失效，代码示例不再提供。
 
 ### 数据集工厂（P6.2）
 

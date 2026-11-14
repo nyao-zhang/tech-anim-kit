@@ -125,6 +125,8 @@ def get_provider(model: Optional[str] = None, offline: Optional[bool] = None,
         model=selected_model, budget=budget, timeout=timeout,
         max_retries=max_retries, retry_backoff=retry_backoff,
         base_url=settings["base_url"],
-        api_key=(os.environ.get(settings["api_key_env"], "").strip()
-                 or os.environ.get("TAK_AI_API_KEY", "").strip()),
+        # 统一走 resolve_settings()：环境变量 > config.json 指定的变量名 >
+        # ~/.tak/credential.json。以前这里自己拼环境变量，导致面板里保存的
+        # 密钥「测试连接能过、真对话又回落到 mock」—— 两处取值的规则必须同源。
+        api_key=settings["api_key"],
     )
