@@ -6,17 +6,17 @@
     {
       "name": "initialize",
       "ok": true,
-      "ms": 625.4,
+      "ms": 700.0,
       "error": "",
       "detail": {
         "name": "tak-scene-bridge",
-        "version": "0.7.1"
+        "version": "0.7.2"
       }
     },
     {
       "name": "tools/list",
       "ok": true,
-      "ms": 104.7,
+      "ms": 117.3,
       "error": "",
       "detail": {
         "tools": 21,
@@ -27,14 +27,14 @@
     {
       "name": "tak_status",
       "ok": true,
-      "ms": 1.2,
+      "ms": 0.7,
       "error": "",
       "detail": "http://127.0.0.1:64486"
     },
     {
       "name": "tak_scene_summary",
       "ok": true,
-      "ms": 6.8,
+      "ms": 7.7,
       "error": "",
       "detail": {
         "ok": true,
@@ -49,16 +49,16 @@
   "warnings": [],
   "command": "C:\\Users\\NYAO\\.workbuddy\\binaries\\python\\versions\\3.13.12\\python.exe",
   "args": [
-    "-m",
-    "tak.mcp"
+    "C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35\\scripts\\tak_mcp_entry.py"
   ],
   "env": {
     "PYTHONPATH": "C:\\Users\\NYAO\\WorkBuddy\\2026-11-12-23-27-35",
     "PYTHONIOENCODING": "utf-8",
     "TAK_HOME": "C:\\Users\\NYAO\\.tak"
   },
+  "minimal_env": false,
   "tool_count": 21,
   "bridge_running": true,
   "bridge_url": "http://127.0.0.1:64486",
-  "stderr": "[tak.mcp] TAK MCP server 0.7.1 ready (bridge=http://127.0.0.1:64486)\r\n"
+  "stderr": "[tak.mcp] TAK MCP server 0.7.2 ready (bridge=http://127.0.0.1:64486)\r\n"
 }

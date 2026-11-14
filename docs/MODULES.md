@@ -196,8 +196,12 @@ v0.6 的「对话式控制台」只是规则问答 + 候选计划预览器，既
 | 宿主实现 | `tak/adapters/maya/scene_ops.py` | 真实 `maya.cmds`：查询 / 绑定逻辑 / 创建 / 改名 / 删除 / 撤销 |
 | 桥 | `tak/core/bridge.py` | `/bridge/actions`、`/bridge/act`、写开关、主线程切换 |
 | 外部接入 | `tak/mcp/server.py` | stdio JSON-RPC 2.0，21 个 MCP tools，普通 Python 即可跑 |
+| 客户端启动器 | `scripts/tak_mcp_entry.py` | v0.7.2：import tak 之前自补 `PYTHONPATH` / `USERPROFILE` / `TAK_HOME`，`env` 被清空也能连桥 |
+| 配置修复 | `tak/mcp/install.py`、`scripts/install_mcp_config.py` | v0.7.2：诊断 / 备份 / 原子写 / 复检，只改 `tak-scene` 一条 |
 
-面板里新增一行：`允许写入（面板 + MCP）` 勾选框，以及 `[执行]` / `[撤销上一次]` / `[MCP 配置]` 三个按钮。写操作永远先出 dry-run 预览，人点「执行」才落地，token 绑定动作与参数、5 分钟过期。
+面板里新增一行：`允许写入（面板 + MCP）` 勾选框，以及 `[执行]` / `[撤销上一次]` / `[MCP 配置]` / `[修复 MCP]` 四个按钮。写操作永远先出 dry-run 预览，人点「执行」才落地，token 绑定动作与参数、5 分钟过期。
+
+> v0.7.2 实测：客户端 UI 删除并重新 Trust `tak-scene` 时，会把 v0.7.0 的旧配置（`command` = `maya.exe`）写回 `mcp.json`，于是又报 `initialize timed out`。`--check` 能只读体检，`--minimal-env` 自检能验证「`env` 整段丢掉」仍可握手，详见 [MCP 文档](mcp.md)。
 
 配置与完整工具表见 **[MCP 文档](mcp.md)**。Maya 2026 standalone 真机探针 `validation/maya_scene_actions_probe.py` 覆盖 18 个动作、撤销、桥与 MCP 真实创建节点，结果 `ok=true`。
 

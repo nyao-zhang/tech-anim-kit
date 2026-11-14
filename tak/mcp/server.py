@@ -394,23 +394,40 @@ def python_executable() -> Tuple[str, str]:
     return "python", "未探测到绝对路径，交给客户端 PATH 解析"
 
 
+def repo_root() -> str:
+    """仓库根目录（``tak/mcp/server.py`` 往上三级）。"""
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def entry_script() -> str:
+    """自包含启动器的绝对路径；文件缺失时返回空串。
+
+    v0.7.2 起优先用 ``scripts/tak_mcp_entry.py`` 而不是 ``-m tak.mcp``：
+    启动器会在 import tak 之前补齐 ``PYTHONPATH`` / ``USERPROFILE`` /
+    ``TAK_HOME``，所以即使客户端把 ``env`` 全量替换成空对象，或配置被
+    手工改坏、重新 Trust 时带出旧值，server 仍能起来并连上桥。
+    """
+    path = os.path.join(repo_root(), "scripts", "tak_mcp_entry.py")
+    return path if os.path.isfile(path) else ""
+
+
 def config_snippet() -> Dict[str, Any]:
     """给 WorkBuddy / Claude Desktop 的 ``mcpServers`` 片段。
 
     ``command`` 由 :func:`python_executable` 决定，**绝不能是 DCC 宿主进程**。
-    ``PYTHONPATH`` 指向仓库根，这样任意工作目录下都能 import tak；
-    ``PYTHONIOENCODING`` 固定 UTF-8，避免中文路径/日志在 Windows 上编码失败。
-    ``TAK_HOME`` 写的是配置目录**绝对路径**：有些客户端把 ``env`` 当全量替换，
-    少了 ``USERPROFILE`` 时 ``os.path.expanduser("~")`` 会返回字面 ``~``，
-    发现文件与 token 全部找不到，工具会一律回「桥未启动」。
+    ``args`` 优先指向 :func:`entry_script`（自举 env），文件不存在才退回
+    ``-m tak.mcp``。``env`` 三键是"正常路径"的显式声明，启动器还会再兜一次底，
+    因此这几个键被删掉或写错也不会退化成「桥未启动」。
     """
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    root = repo_root()
     exe, _source = python_executable()
+    entry = entry_script()
+    command_args = [entry] if entry else ["-m", "tak.mcp"]
     return {
         "mcpServers": {
             "tak-scene": {
                 "command": exe,
-                "args": ["-m", "tak.mcp"],
+                "args": command_args,
                 "env": {
                     "PYTHONPATH": root,
                     "PYTHONIOENCODING": "utf-8",
@@ -421,5 +438,49 @@ def config_snippet() -> Dict[str, Any]:
     }
 
 
-__all__ = ["PROTOCOL_VERSION", "bridge_tools", "config_snippet", "handle",
-           "python_executable", "serve"]
+def diagnose_config(entry: Dict[str, Any]) -> List[str]:
+    """体检一条 mcpServers 配置，返回人类可读的问题列表（空列表 = 没问题）。
+
+    给一键安装脚本、自检脚本和面板用：把「initialize 超时」和「桥未启动」
+    这两类现象直接对应到具体字段上，而不是让人去翻客户端日志。
+    """
+    problems: List[str] = []
+    command = str(entry.get("command") or "")
+    if not command:
+        problems.append("command 为空")
+    elif not _is_python_exe(command):
+        problems.append(
+            "command=%r 是 DCC 宿主或不是 Python 解释器，客户端会一直等不到 "
+            "initialize；必须换成普通 python.exe" % command)
+    elif not os.path.isfile(command):
+        problems.append("command 指向的文件不存在：%s" % command)
+
+    args = [str(item) for item in (entry.get("args") or [])]
+    if not args:
+        problems.append("args 为空，server 不会进入协议循环")
+    elif not any(item == "-m" or item.endswith("tak_mcp_entry.py") for item in args):
+        problems.append("args 既没有 -m tak.mcp 也没有 tak_mcp_entry.py：%r" % args)
+
+    use_entry = any(item.endswith("tak_mcp_entry.py") for item in args)
+    if use_entry:
+        for item in args:
+            if item.endswith("tak_mcp_entry.py") and not os.path.isfile(item):
+                problems.append("启动器文件不存在：%s" % item)
+    else:
+        for item in args:
+            if item.endswith(".py") and not os.path.isfile(item):
+                problems.append("args 指向的脚本不存在：%s" % item)
+
+    env = entry.get("env") or {}
+    if not isinstance(env, dict):
+        problems.append("env 不是对象")
+        env = {}
+    # 用了启动器时 env 全空也没关系：启动器会自己补 TAK_HOME / USERPROFILE。
+    if not use_entry and not str(env.get("TAK_HOME") or "").strip():
+        problems.append("env 缺 TAK_HOME；客户端若全量替换环境，"
+                        "expanduser('~') 会退化成字面 '~'，工具一律回「桥未启动」")
+    return problems
+
+
+__all__ = ["PROTOCOL_VERSION", "bridge_tools", "config_snippet", "diagnose_config",
+           "entry_script", "handle", "python_executable", "repo_root", "serve"]

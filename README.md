@@ -2,7 +2,9 @@
 
 跨 DCC 技术动画工具集，面向 **Maya 2023+ / 3ds Max 2023+ / MotionBuilder 2023+ / Unreal Engine 5.8–5.9**。
 
-> 当前版本 `0.7.1`（**MCP 接得上了**：配置里的解释器不再误写成 `maya.exe`，`env` 补齐 `TAK_HOME`）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
+> 当前版本 `0.7.2`（**MCP 配置不会再被旧片段搞坏**：自包含启动器 + 一键修复）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
+>
+> v0.7.2 修「改好了又超时」：在客户端 UI 里删除并重新 Trust `tak-scene` 时，表单会把 v0.7.0 的旧配置（`command` = `maya.exe`）写回 `~/.workbuddy/mcp.json`，客户端去启动 Maya GUI，30 秒收不到 `initialize`。现在配置片段指向 `scripts/tak_mcp_entry.py`——它在 import tak 之前自补 `PYTHONPATH` / `USERPROFILE` / `TAK_HOME`，**`env` 整段删掉也能连上桥**；并提供 `python scripts/install_mcp_config.py` 与面板「修复 MCP」按钮，自动备份 + 修 + 复检。
 >
 > v0.7.1 修两个真机问题：从 Maya 面板「MCP 配置」复制出的片段把 `command` 写成了 `maya.exe`（客户端报 `MCP initialize timed out for "custom-mcp:tak-scene"`）；客户端全量替换 `env` 时 `~` 解析失败，握手能过但每个工具都回「桥未启动」。现在自动探测独立 Python，并把配置目录绝对路径写进 `env`，面板日志台会显示解释器来源。
 >

@@ -120,10 +120,15 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     undo_button.setToolTip("撤销最近一次由 TAK 执行的写操作")
     mcp_button = QtWidgets.QPushButton("MCP 配置")
     mcp_button.setToolTip("显示可直接粘进 WorkBuddy / Claude Desktop 的 mcpServers 配置")
+    mcp_fix_button = QtWidgets.QPushButton("修复 MCP")
+    mcp_fix_button.setToolTip(
+        "体检并修好本机 ~/.workbuddy/mcp.json 的 tak-scene 条目（自动备份）。"
+        "客户端重新 Trust 后若又把 command 写回 maya.exe，点这里一次即可。")
     action_row.addWidget(write_box, 1)
     action_row.addWidget(execute_button, 0)
     action_row.addWidget(undo_button, 0)
     action_row.addWidget(mcp_button, 0)
+    action_row.addWidget(mcp_fix_button, 0)
 
     # 候选 / 报告视图 + 对话日志
     result_table = ResultTable(central)
@@ -270,6 +275,11 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
                                "info")
             log_console.append(snippet, "info")
             log_console.append("解释器：%s（来源：%s）" % (exe, source), "info")
+            log_console.append(
+                "配置里的 args 指向 scripts/tak_mcp_entry.py：它会在启动前自补 "
+                "PYTHONPATH / USERPROFILE / TAK_HOME，env 被客户端清空也能连上桥。"
+                "若客户端重新 Trust 后又报 initialize timed out，点右边的「修复 MCP」"
+                "或运行 python scripts/install_mcp_config.py。", "info")
             if source.startswith("DCC 自带解释器") or exe == "python":
                 log_console.append(
                     "当前进程是 DCC 宿主且没在 PATH 找到独立 Python；若客户端连不上，"
@@ -285,6 +295,35 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
             status.set_status("MCP 配置已输出到日志台")
         except Exception as exc:
             log_console.error("MCP 配置读取失败: %s: %s" % (type(exc).__name__, exc))
+
+    def _on_mcp_fix() -> None:
+        """体检 + 修复本机 MCP 配置。异常必须落到日志台，Qt 槽里的异常会被吞掉。"""
+        try:
+            report = core.mcp_diagnose()
+            for item in report.get("problems") or []:
+                log_console.append("配置体检：%s" % item, "warning")
+            if report.get("ok"):
+                log_console.append("配置体检通过，无需改动：%s"
+                                   % report.get("path", ""), "info")
+                status.set_status("MCP 配置正常")
+                return
+            fixed = core.mcp_repair()
+            if not fixed.get("ok"):
+                log_console.error("MCP 配置修复失败：%s" % fixed.get("error"))
+                return
+            if fixed.get("backup"):
+                log_console.append("已备份旧配置：%s" % fixed["backup"], "info")
+            server = fixed.get("server") or {}
+            log_console.append("已修复：%s" % fixed.get("path", ""), "info")
+            log_console.append("command = %s" % server.get("command", ""), "info")
+            log_console.append("args = %r" % (server.get("args") or []), "info")
+            log_console.append(
+                "写入后复检通过。请重启 WorkBuddy 客户端（或重新 Trust tak-scene）"
+                "让它重新读取配置；不要在添加表单里沿用旧的 maya.exe 片段。", "info")
+            status.set_status("MCP 配置已修复，请重启客户端")
+        except Exception as exc:
+            log_console.error("MCP 配置修复失败: %s: %s"
+                              % (type(exc).__name__, exc))
 
     def _on_write_toggled(checked: bool) -> None:
         try:
@@ -313,6 +352,7 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     execute_button.clicked.connect(_on_execute)
     undo_button.clicked.connect(_on_undo)
     mcp_button.clicked.connect(_on_mcp_config)
+    mcp_fix_button.clicked.connect(_on_mcp_fix)
     write_box.toggled.connect(_on_write_toggled)
 
     # ------------------------------------------------------------ 连接区逻辑
@@ -419,6 +459,7 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     window._agent_execute = _on_execute
     window._agent_undo = _on_undo
     window._agent_mcp_config = _on_mcp_config
+    window._agent_mcp_fix = _on_mcp_fix
     window._agent_write_box = write_box
     window._agent_execute_button = execute_button
     window._agent_result_table = result_table

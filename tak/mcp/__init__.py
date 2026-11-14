@@ -6,8 +6,10 @@
 """
 from __future__ import annotations
 
-from .server import (PROTOCOL_VERSION, bridge_tools, config_snippet, handle,
-                     python_executable, serve)
+from .server import (PROTOCOL_VERSION, bridge_tools, config_snippet,
+                     diagnose_config, entry_script, handle, python_executable,
+                     repo_root, serve)
 
-__all__ = ["PROTOCOL_VERSION", "bridge_tools", "config_snippet", "handle",
-           "python_executable", "serve"]
+__all__ = ["PROTOCOL_VERSION", "bridge_tools", "config_snippet",
+           "diagnose_config", "entry_script", "handle", "python_executable",
+           "repo_root", "serve"]

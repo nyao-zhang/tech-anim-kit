@@ -2,7 +2,7 @@
 
 > 用一句中文查当前场景、骨架与蒙皮，或创建、改名、删除节点；写操作先出 dry-run 预览，你点「执行」才落地。同一套动作经 MCP 暴露给外部 AI。旧的规则问答与候选计划仍然保留。
 
-**适用版本** TAK `0.7.0`　·　**DCC** maya / max / mobu / unreal（真实宿主动作目前只有 Maya）　·　**权限** `scene.read` / `node.write`　·　**UI** `both`
+**适用版本** TAK `0.7.2`　·　**DCC** maya / max / mobu / unreal（真实宿主动作目前只有 Maya）　·　**权限** `scene.read` / `node.write`　·　**UI** `both`
 
 ## 1. 它解决什么问题
 
@@ -42,7 +42,8 @@
 | `[AI 连接]` | 三步向导：选服务商 → 粘密钥 → 测试连接。密钥存 `~/.tak/credential.json`，不进 `config.json` |
 | `允许写入（面板 + MCP）` | 默认**关**。关着时只能查询与预览；打开后写操作仍需 dry-run + 点「执行」 |
 | `[执行]` / `[撤销上一次]` | 执行上一次预览的写操作 / 撤销最近一次 TAK 写入 |
-| `[MCP 配置]` | 输出并复制可直接粘进 WorkBuddy 的 `mcpServers` 配置片段 |
+| `[MCP 配置]` | 输出并复制可直接粘进 WorkBuddy 的 `mcpServers` 配置片段（v0.7.2 起 `args` 指向 `scripts/tak_mcp_entry.py`，启动前自补环境变量） |
+| `[修复 MCP]` | v0.7.2 新增。体检本机 `~/.workbuddy/mcp.json` 的 `tak-scene` 条目；有问题就备份旧文件、写入正确配置并复检，结果写日志台。客户端重新 Trust 后若又把 `command` 写回 `maya.exe`（表现为 `initialize timed out`），点一次即可，然后重启客户端 |
 
 两者互不依赖：不开 AI 也能让外部调工具（本地关键词解析照常可用）；不开桥也能在面板里查改本机场景。桥开着 + 打开写入 + 配好 MCP，外部 AI 才能改场景，见 [MCP 文档](../mcp.md)。
 

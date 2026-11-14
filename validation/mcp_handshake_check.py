@@ -90,6 +90,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         os.path.expanduser("~"), ".workbuddy", "mcp.json"))
     parser.add_argument("--server", default="tak-scene")
     parser.add_argument("--out", default=DEFAULT_OUT)
+    parser.add_argument("--minimal-env", action="store_true",
+                        help="完全忽略配置里的 env（只留 SystemRoot/PATH），"
+                             "验证启动器能否自举；模拟最狠的客户端")
     args = parser.parse_args(argv)
 
     result: Dict[str, Any] = {"ok": False, "config": args.config,
@@ -106,24 +109,38 @@ def main(argv: Optional[List[str]] = None) -> int:
         result["command"] = command
         result["args"] = command_args
         result["env"] = env_cfg
+        result["minimal_env"] = bool(args.minimal_env)
 
         if not _looks_like_python(command):
             result["warnings"].append(
                 "command=%r 不是 Python 解释器（很像 DCC 宿主进程）；"
-                "这正是 initialize 超时的典型原因。用 "
-                "python -m tak.mcp --print-config 重新生成。" % command)
-            result["fatal"] = "command 不是 Python 解释器"
+                "这正是 initialize 超时的典型原因。运行 "
+                "python scripts/install_mcp_config.py 一键修复。" % command)
+            result["fatal"] = ("command 不是 Python 解释器（客户端会去启动 DCC GUI，"
+                               "30 秒收不到 initialize 响应）")
             return 1
-        if not env_cfg.get("TAK_HOME"):
+        uses_entry = any(item.endswith("tak_mcp_entry.py") for item in command_args)
+        if (not uses_entry and not env_cfg.get("TAK_HOME")
+                and not args.minimal_env):
             result["warnings"].append(
                 "env 没有 TAK_HOME；客户端若全量替换环境，桥发现文件会找不到，"
-                "工具一律回「桥未启动」。")
+                "工具一律回「桥未启动」。用 tak_mcp_entry.py 启动器可免此依赖。")
         if not os.path.isfile(command):
             result["fatal"] = "command 指向的文件不存在：%s" % command
             return 1
+        for item in command_args:
+            if item.endswith(".py") and not os.path.isfile(item):
+                result["fatal"] = "args 指向的启动脚本不存在：%s" % item
+                return 1
+        if not any(item == "-m" or item.endswith("tak_mcp_entry.py")
+                   for item in command_args):
+            result["fatal"] = ("args 既没有 -m tak.mcp 也没有 tak_mcp_entry.py，"
+                               "server 不会进入协议循环：%r" % command_args)
+            return 1
 
         # 模拟最严苛的客户端：只给配置里的 env + 最小系统变量，不继承 USERPROFILE。
-        env = dict(env_cfg)
+        # --minimal-env 时连配置 env 都丢掉，专门验证启动器自举能力。
+        env = {} if args.minimal_env else dict(env_cfg)
         env.setdefault("SystemRoot", os.environ.get("SystemRoot", r"C:\Windows"))
         env.setdefault("PATH", os.environ.get("PATH", ""))
         proc = subprocess.Popen([command] + command_args,

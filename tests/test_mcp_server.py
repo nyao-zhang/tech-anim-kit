@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 
 from tak.mcp import config_snippet, handle, serve
 from tak.mcp import server as mcp
@@ -121,10 +122,20 @@ def test_config_snippet_uses_current_interpreter(monkeypatch):
     snippet = config_snippet()
     entry = snippet["mcpServers"]["tak-scene"]
     assert entry["command"] == sys.executable
-    assert entry["args"] == ["-m", "tak.mcp"]
+    # v0.7.2 起优先用自包含启动器：env 被客户端清空也能 import tak / 找到桥
+    assert entry["args"] == [mcp.entry_script()]
+    assert os.path.isfile(entry["args"][0])
     assert entry["env"]["PYTHONPATH"]
     assert entry["env"]["PYTHONIOENCODING"] == "utf-8"
     assert entry["env"]["TAK_HOME"]
+    assert mcp.diagnose_config(entry) == []
+
+
+def test_config_snippet_falls_back_to_module_when_entry_missing(monkeypatch):
+    """启动器文件不存在（例如只装了 tak 包）时仍要能用 -m 启动。"""
+    monkeypatch.setattr(mcp, "entry_script", lambda: "")
+    entry = config_snippet()["mcpServers"]["tak-scene"]
+    assert entry["args"] == ["-m", "tak.mcp"]
 
 
 def test_config_snippet_never_points_at_dcc_host(monkeypatch):

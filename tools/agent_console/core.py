@@ -266,6 +266,23 @@ def mcp_config() -> Dict[str, Any]:
     return config_snippet()
 
 
+def mcp_diagnose() -> Dict[str, Any]:
+    """只读体检本机 MCP 客户端配置（不写文件）。"""
+    from tak.mcp import install as mcp_install
+    return mcp_install.diagnose()
+
+
+def mcp_repair() -> Dict[str, Any]:
+    """修好本机 MCP 客户端配置：备份 + 原子写 + 复检。
+
+    客户端 UI 重新 Trust 时可能把 v0.7.0 的旧 ``maya.exe`` 片段写回
+    ``mcp.json``，导致 ``initialize timed out``。面板里的「修复 MCP」按钮走这里，
+    与命令行 ``scripts/install_mcp_config.py`` 是同一份逻辑。
+    """
+    from tak.mcp import install as mcp_install
+    return mcp_install.repair()
+
+
 def write_enabled() -> bool:
     from tak.core import bridge
     return bridge.allow_write()

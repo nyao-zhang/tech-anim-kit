@@ -1,7 +1,7 @@
 # 让外部 AI 直接操作 DCC 场景（MCP）
 
 > 一句需求 → AI 选出受限动作 → 本地桥 → Maya 主线程 → 真实查改场景。
-> 适用 TAK `0.7.1`　·　当前已实现宿主：**Maya 2023+**（Max / MoBu / UE 的能力表会列出，但没有宿主 handler，调用会明确报「未实现」）。
+> 适用 TAK `0.7.2`　·　当前已实现宿主：**Maya 2023+**（Max / MoBu / UE 的能力表会列出，但没有宿主 handler，调用会明确报「未实现」）。
 
 ## 1. 它和 v0.6 的「对话控制台」不是一回事
 
@@ -13,7 +13,7 @@ v0.7.0 补上了完整链路：
 WorkBuddy / Claude Desktop / 任何 MCP 客户端
         │  stdio · JSON-RPC 2.0
         ▼
-python -m tak.mcp            ← 普通 Python，零第三方依赖，不 import Maya
+python scripts/tak_mcp_entry.py  ← 普通 Python，零第三方依赖，不 import Maya
         │  HTTP 127.0.0.1 · X-TAK-Token
         ▼
 DCC 面板里的 TAK 桥         ← 只绑回环，请求切回 Maya 主线程
@@ -46,14 +46,14 @@ print(bridge.bridge_status()["url"])
 python -m tak.mcp --print-config
 ```
 
-输出形如：
+输出形如（`args` 指向自包含启动器，不是 `-m`）：
 
 ```json
 {
   "mcpServers": {
     "tak-scene": {
       "command": "C:\\...\\python.exe",
-      "args": ["-m", "tak.mcp"],
+      "args": ["C:\\...\\tech-anim-kit\\scripts\\tak_mcp_entry.py"],
       "env": {
         "PYTHONPATH": "<仓库根目录>",
         "PYTHONIOENCODING": "utf-8",
@@ -66,35 +66,46 @@ python -m tak.mcp --print-config
 
 把这段加进 WorkBuddy 的 MCP 配置（或 Claude Desktop 的 `claude_desktop_config.json`），然后重启客户端让它重新加载 MCP server。
 
+**更省事的做法**：直接跑 `python scripts/install_mcp_config.py`，它会读你正在用的 `~/.workbuddy/mcp.json`，备份旧文件、只改 `tak-scene` 这一条、复检并做一次真实握手；在 Maya 面板里点 **「修复 MCP」** 效果相同（同样自动备份）。以后只要客户端 UI 重新 Trust 后又把旧片段写回来，重跑一次即可。
+
 > **`command` 必须是普通 `python.exe`，绝不能是 `maya.exe` / `3dsmax.exe` 之类的 DCC 宿主。**
 > v0.7.0 在面板里点「MCP 配置」时误用了 `sys.executable`，而它在 Maya 进程内等于
 > `maya.exe`；客户端会去启动 Maya GUI，永远等不到 `initialize`，报
 > `MCP initialize timed out for "custom-mcp:tak-scene"`。v0.7.1 起会自动探测独立
 > Python（`TAK_MCP_PYTHON` → 当前解释器 → PATH → `py -3` → `mayapy`），并把来源
 > 写进日志台。仍然不对时，设 `TAK_MCP_PYTHON` 指向一个 `python.exe` 再点一次。
+>
+> **v0.7.2 补了一个真实的坑**：客户端 UI 里删除并重新添加 / 重新 Trust
+> `tak-scene` 时，表单可能把 v0.7.0 的旧片段（含 `maya.exe`）**写回** `mcp.json`，
+> 于是「昨天刚修好今天又超时」。本机 `daemon.log` 的 `McpAuth` 诊断能直接看到
+> 它拉起的 `command` 与 30 秒超时。遇到这种情况不要手动照旧片段重填，跑
+> `python scripts/install_mcp_config.py` 或在面板点「修复 MCP」，然后**重启客户端**。
 
-三个 `env` 键各有用途，别删：
+三个 `env` 键的用途（v0.7.2 起**删了也能跑**：`tak_mcp_entry.py` 会自己补齐，但建议保留，正常路径更直白）：
 
-| 键 | 为什么必须有 |
+| 键 | 为什么有它 |
 |---|---|
-| `PYTHONPATH` | 客户端的工作目录不是仓库根，不设就 `ModuleNotFoundError: tak` |
+| `PYTHONPATH` | 客户端的工作目录不是仓库根；不设且没用启动器时 `ModuleNotFoundError: tak` |
 | `PYTHONIOENCODING` | 固定 UTF-8，中文日志在 Windows 管道里不会编码失败 |
 | `TAK_HOME` | 配置目录的**绝对路径**。有些客户端把 `env` 当全量替换，少了 `USERPROFILE` 时 `os.path.expanduser("~")` 会返回字面 `~`，桥发现文件与 token 全找不到，工具会一律回「桥未启动」 |
 
-`TAK_HOME` 指向的是 `~/.tak` 目录本身（里面放 `config.json` / `bridge.json`），不是它的父目录。
+`TAK_HOME` 指向的是 `~/.tak` 目录本身（里面放 `config.json` / `bridge.json`），不是它的父目录。启动器在 `USERPROFILE` 缺失时会用 `SHGetFolderPathW(CSIDL_PROFILE)` 拿真实主目录，再把 `TAK_HOME` 补成绝对路径；所以 `env` 被整段清空、`PYTHONPATH` 也没了，它照样能 import tak 并连上桥。
 
 自检（不进 MCP 客户端也能做）：
 
 ```bash
 python -m tak.mcp --status                 # 看桥有没有开
-python -m tak.mcp --print-config          # 看当前生成的 command / env 对不对
+python -m tak.mcp --print-config          # 看当前生成的 command / args / env 对不对
+python scripts/install_mcp_config.py --check   # 只体检本机 mcp.json，不写文件
+python scripts/install_mcp_config.py         # 体检 + 备份 + 修 + 完整握手
 echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"check","version":"1"}}}' | python -m tak.mcp
 python validation/mcp_handshake_check.py   # 按当前 mcp.json 完整握手 + 真读场景
+python validation/mcp_handshake_check.py --minimal-env  # 把 env 全丢掉再握一次
 ```
 
 最后一条应该**立刻**回一行 `{"jsonrpc":"2.0","id":1,"result":{...}}`。没回或卡住，先查 `command` 是不是被写成了 DCC 宿主 exe。
 
-`mcp_handshake_check.py` 会读你正在用的 `~/.workbuddy/mcp.json`，按里面的 `command` / `args` / `env` 真起一个子进程（故意不继承 `USERPROFILE`，模拟最严苛的客户端），依次跑 `initialize`、`tools/list`、`tak_status`，桥在跑时再只读一次 `tak_scene_summary`。输出每一步耗时与结论，结果写 `validation/mcp_handshake_result.json`，退出码 0 才是全通。换机器、换客户端、换了 Python 路径之后先跑它，比看日志快。
+`mcp_handshake_check.py` 会读你正在用的 `~/.workbuddy/mcp.json`，按里面的 `command` / `args` / `env` 真起一个子进程（故意不继承 `USERPROFILE`，模拟最严苛的客户端；`--minimal-env` 时连配置里的 `env` 也丢掉），依次跑 `initialize`、`tools/list`、`tak_status`，桥在跑时再只读一次 `tak_scene_summary`。输出每一步耗时与结论，结果写 `validation/mcp_handshake_result.json`，退出码 0 才是全通。换机器、换客户端、换了 Python 路径之后先跑它，比看日志快。它还会直接把「`command` 不是 Python 解释器」「启动器文件不存在」判成 fatal，不用等 30 秒超时再猜。
 
 ### 第 3 步：要不要允许写入
 
@@ -177,8 +188,10 @@ AI 把 preview 原样展示给你，你说「做吧」，它才发第二次：
 
 | 现象 | 原因 / 处理 |
 |---|---|
-| `MCP initialize timed out for "custom-mcp:tak-scene"` | `command` 被写成了 `maya.exe` 等 DCC 宿主进程（v0.7.0 面板「MCP 配置」的 bug）：客户端去启动 Maya GUI，永远等不到握手。运行 `python -m tak.mcp --print-config` 重新生成，确认是 `python.exe`；改完在客户端重新 Trust / 重启使其加载新配置 |
-| 握手成功，但每个工具都回「桥未启动」 | 客户端把 `env` 当全量替换，进程里没有 `USERPROFILE`，`expanduser("~")` 返回字面 `~`，发现文件找不到。在 `env` 里补 `TAK_HOME` 为 `~/.tak` 的绝对路径，并用 `python -m tak.mcp --status` 对比 |
+| `MCP initialize timed out for "custom-mcp:tak-scene"` | `command` 被写成了 `maya.exe` 等 DCC 宿主进程：客户端去启动 Maya GUI，stdout 永远没有 JSON-RPC。跑 `python scripts/install_mcp_config.py --check` 看诊断，或 `python validation/mcp_handshake_check.py` 直接判 fatal；修复用 `python scripts/install_mcp_config.py`（或面板「修复 MCP」），然后**重启客户端**。客户端日志里的 `McpAuth stdio-probe-failed` 会列出它实际拉起的 `command` |
+| 昨天改对了，重新 Trust / 重新添加后又超时 | 客户端 UI 的表单把含 `maya.exe` 的 v0.7.0 旧片段**写回** `mcp.json`（v0.7.2 实测：`mcp.json` mtime 与 `wb:mcp:remove` → `wb:mcp:connect` 日志对得上）。不要在表单里沿用旧值；重跑一键修复，再重启客户端让它重新读文件 |
+| 握手成功，但每个工具都回「桥未启动」 | 客户端把 `env` 当全量替换，进程里没有 `USERPROFILE`，`expanduser("~")` 返回字面 `~`，发现文件找不到。v0.7.2 起 `tak_mcp_entry.py` 会自补，确认 `args` 指向它；若仍是 `-m tak.mcp`，补 `TAK_HOME` 为 `~/.tak` 的绝对路径，并用 `python -m tak.mcp --status` 对比 |
+| 自检报 `args 指向的启动脚本不存在` | 仓库被移动或只拷贝了 `tak/` 包。把 `scripts/tak_mcp_entry.py` 一起带上，或让 `config_snippet()` 回落到 `-m tak.mcp` 并补全 `env` |
 | `TAK 桥未启动` | 在 Maya 面板点「启动桥接」；`python -m tak.mcp --status` 确认 |
 | `401 缺少或错误的 X-TAK-Token` | `~/.tak/config.json` 的 `bridge.token` 与发现文件不一致；停桥再启动一次 |
 | `外部写入未启用` | 面板勾选「允许写入」，或 `python -m tak.core.bridge write on` |
@@ -208,3 +221,12 @@ MCP 侧不依赖 AI 端点：外部 AI 客户端自己就是模型，TAK 只提�
 `mayapy` standalone 没有 Qt 事件循环，`executeInMainThreadWithResult` 的 idle 队列不推进，所以探针里把宿主执行器换成同线程直调；真实 Maya GUI 的线程切换由适配器注册的 `maya.utils` 执行器保证，**这条切换本身不在 standalone 探针覆盖范围内**。HTTP 传输、token 校验、参数白名单与两阶段确认都在真机探针与单元测试中覆盖。
 
 v0.7.1 另外按**客户端实际配置**跑了一次端到端握手（子进程只给 `env` 里的三个键 + `SystemRoot`/`PATH`）：`initialize` 653 ms、`tools/list` 21 个工具且 `bridge_running=True`、`tak_status` 返回真实桥地址、`tak_scene_summary` 从正在运行的 Maya 2026 GUI 读到帧范围 `1–120` 与节点计数。**客户端 UI 里点 Trust 后是否重新加载配置这一步没有代跑**，需要你重启一次客户端确认。
+
+v0.7.2 证明了「重启前那步配置被回写」确实是本次超时的原因，并补了两次端到端验证（同一台机器、Maya 2026 GUI 桥在跑、地址 `http://127.0.0.1:64486`）：
+
+| 场景 | initialize | tools/list | 真实场景读取 |
+|---|---|---|---|
+| 修复后按 `mcp.json` 正常 env 启动 | 约 700 ms | 21 个工具，`bridge_running=true` | `tak_scene_summary` → `ok=true`，帧范围 `1–120` |
+| `--minimal-env`：`env` 整段丢掉，只留 `SystemRoot` / `PATH` | 约 700 ms | 21 个工具，`bridge_running=true` | 同样读到 `1–120` |
+
+第二行是关键：没有 `PYTHONPATH`、没有 `USERPROFILE`、没有 `TAK_HOME`，启动器照样 import 到 tak 并找到桥发现文件。证据文件在 `validation/mcp_handshake_result.json` 与 `validation/mcp_minimal_env_result.json`。**仍然没有代跑的一步**：客户端 UI 里点 Trust / 重启后是否重新加载新配置——这必须由你在客户端里操作一次；操作后如果又超时，先看 `~/.workbuddy/mcp.json` 的 `command`，八成又被表单写回旧值了。

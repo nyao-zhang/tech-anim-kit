@@ -13,6 +13,47 @@
 
 （无）
 
+## [0.7.2] - 2026-11-14
+
+一句话：**修好「刚改对，重新 Trust 一次又超时」——配置被客户端 UI 回写成旧的 `maya.exe`，并让 server 不再依赖 `env`。**
+
+v0.7.1 已经把 `~/.workbuddy/mcp.json` 改对、握手自检也通过，但用户再次报 `MCP initialize timed out for "custom-mcp:tak-scene"`。这次的证据不是靠猜：
+
+* `mcp.json` 的 mtime 是 `2026-11-14 20:26:45`，内容是 v0.7.0 的旧片段（`command` = `maya.exe`，`env` 只有 `PYTHONPATH`）；
+* `daemon.log` 里 `wb:mcp:remove` → `wb:mcp:connect` 正好在 20:26:41 / 20:26:53，说明用户在 UI 里删除并重新添加，表单把旧值写了回去；
+* `McpAuth` 诊断明确记录 `command: maya.exe`、`elapsedMs: 30004`、`stderrChunks: 0`——客户端拉起的是 Maya GUI，stdout 从头到尾没有一行 JSON-RPC；
+* 全盘搜索 `~/.workbuddy` 后确认：**自定义 MCP 的配置只存在 `mcp.json` 这一处**，没有第二份缓存，所以改文件是有效动作，但必须让客户端重新读。
+
+### Added
+
+- **`scripts/tak_mcp_entry.py`**：MCP 客户端的自包含启动器。在 import 任何 tak 代码之前补 `PYTHONPATH`、用 `SHGetFolderPathW(CSIDL_PROFILE)` 等逐级兜底拿到 `USERPROFILE` / `HOMEDRIVE` / `APPDATA`、设绝对 `TAK_HOME`，再补 `SystemRoot` / `TEMP`，最后转交 `tak.mcp.__main__`。因此客户端把 `env` 当成全量替换、甚至整段清空，server 仍能 import 并连上桥。
+- **`tak/mcp/install.py`**：配置诊断 / 备份 / 原子写 / 复检的单一事实源。`diagnose_config()` 会把「`command` 是 DCC 宿主」「缺 `TAK_HOME`」「启动器文件不存在」直接对应到字段上。
+- **`scripts/install_mcp_config.py`**：一键修 + 真实子进程握手自检；`--check` 只体检不写，`--python` 指定解释器，`--config` 指定别的 `mcp.json`。只改 `tak-scene` 一条，其它 server 原样保留，写前自动备份成 `mcp.json.bak-<时间戳>`。
+- **面板「修复 MCP」按钮**（`tools/agent_console/ui_qt.py`、`core.py`）：不用敲命令行也能在 Maya 里修好本机配置，结果写日志台；与命令行共用 `tak/mcp/install.py`。
+- `validation/mcp_handshake_check.py` 增 `--minimal-env`：完全忽略配置里的 `env`，只留 `SystemRoot` / `PATH`，专门验证启动器自举。
+- `tests/test_mcp_entry.py`：10 个回归用例，含「空 env 下真实子进程 `initialize`」「一键脚本修旧配置且保留其它 server」「面板 core 与命令行走同一份逻辑」。
+
+### Changed
+
+- `tak/mcp/server.py` 的 `config_snippet()` 现在把 `args` 指向 `scripts/tak_mcp_entry.py`（文件不存在才回落 `-m tak.mcp`），`command` 仍是独立 `python.exe`。`docs/mcp.md` 的配置示例、env 说明、排错表同步更新。
+- 面板「MCP 配置」按钮的日志台会说明启动器原理，并提示「重新 Trust 后又超时就点修复 MCP」。
+
+### Fixed
+
+- **旧配置被回写导致 `initialize timed out`**：本机 `~/.workbuddy/mcp.json` 已由一键脚本修正并备份为 `mcp.json.bak-20261114-204312`；新配置的 `args` 指向启动器，客户端重新加载后即使又带出旧 `env` 也不会退化成「桥未启动」。
+- **`env` 全量替换时桥失联**：不再依赖 `TAK_HOME` 一定被传进来，启动器自举绝对路径。
+
+### 验证记录（本机 · Maya 2026 GUI 开着桥）
+
+`python scripts/install_mcp_config.py` 修完立刻自检：`initialize` 约 700 ms、`tools/list` 21 个工具且 `bridge_running=true`、`tak_status` 返回 `http://127.0.0.1:64486`、`tak_scene_summary` 从真实 Maya 场景读到帧范围 `1–120`。
+再跑 `python validation/mcp_handshake_check.py --minimal-env`（把 `env` 整个丢掉）：同样约 700 ms、21 个工具、`bridge_running=true`、读到 `1–120`，证明启动器自举有效。两份证据分别在 `validation/mcp_handshake_result.json` 与 `validation/mcp_minimal_env_result.json`。
+全量 `pytest`：**1213 个用例通过**。
+
+### Known limitations
+
+- **客户端 UI 里的重新加载仍需用户操作**：改完 `mcp.json` 后要重启 WorkBuddy 客户端（或重新 Trust），让内存里的旧 server 定义失效；这一步 AI 没有代跑。重新添加时**不要沿用表单里带出的旧 `maya.exe` 片段**。
+- Max / MoBu / UE 的动作仍会明确报「未实现」；`mayapy standalone` 探针不覆盖真实 GUI 主线程切换。
+
 ## [0.7.1] - 2026-11-14
 
 一句话：**修好「MCP initialize timed out」——配置里的 `command` 曾被写成 `maya.exe`。**
