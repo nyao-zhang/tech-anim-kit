@@ -1,0 +1,932 @@
+{
+  "ok": true,
+  "dcc": "maya",
+  "tak_home": "C:\\Users\\NYAO\\AppData\\Local\\Temp\\tak_scene_probe_rop0xkz2",
+  "steps": [
+    {
+      "name": "build_scene",
+      "ok": true,
+      "value": {
+        "body": "body",
+        "skinCluster": "body_skin",
+        "joints": [
+          "root",
+          "spine"
+        ]
+      }
+    },
+    {
+      "name": "scene.summary",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "scene.summary",
+        "read_only": true,
+        "status": "ok",
+        "result": {
+          "scene": "",
+          "scene_name": "",
+          "dcc": "maya",
+          "frame_range": [
+            1.0,
+            120.0
+          ],
+          "current_frame": 1.0,
+          "linear_unit": "cm",
+          "time_unit": "film",
+          "counts": {
+            "transform": 8,
+            "joint": 2,
+            "mesh": 2,
+            "skinCluster": 1,
+            "nurbsCurve": 1
+          },
+          "selection": [],
+          "selection_error": "",
+          "modified": true
+        },
+        "dry_run": false,
+        "committed": false
+      }
+    },
+    {
+      "name": "summary.joints>=2",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "scene.list_nodes",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "scene.list_nodes",
+        "read_only": true,
+        "status": "ok",
+        "result": {
+          "count": 2,
+          "limit": 50,
+          "nodes": [
+            "root",
+            "spine"
+          ],
+          "truncated": false
+        },
+        "dry_run": false,
+        "committed": false
+      }
+    },
+    {
+      "name": "list_nodes.finds_root",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "scene.find",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "scene.find",
+        "read_only": true,
+        "status": "ok",
+        "result": {
+          "query": "ctrl",
+          "count": 2,
+          "nodes": [
+            "ctrl_root",
+            "ctrl_rootShape"
+          ],
+          "truncated": false
+        },
+        "dry_run": false,
+        "committed": false
+      }
+    },
+    {
+      "name": "find.ctrl_root",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "scene.get_node",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "scene.get_node",
+        "read_only": true,
+        "status": "ok",
+        "result": {
+          "node": "root",
+          "type": "joint",
+          "full_path": "|root",
+          "parent": null,
+          "children": [
+            "|root|spine"
+          ],
+          "translate": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "rotate": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ]
+          ],
+          "scale": [
+            [
+              1.0,
+              1.0,
+              1.0
+            ]
+          ],
+          "visibility": true,
+          "user_attributes": [
+            "lockInfluenceWeights"
+          ],
+          "extra": {}
+        },
+        "dry_run": false,
+        "committed": false
+      }
+    },
+    {
+      "name": "get_node.type",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "scene.get_attr",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "scene.get_attr",
+        "read_only": true,
+        "status": "ok",
+        "result": {
+          "node": "body",
+          "attribute": "tx",
+          "value": 0.0,
+          "type": "doubleLinear",
+          "locked": true
+        },
+        "dry_run": false,
+        "committed": false
+      }
+    },
+    {
+      "name": "get_attr.value",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "scene.frame_range",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "scene.frame_range",
+        "read_only": true,
+        "status": "ok",
+        "result": {
+          "playback_start": 1.0,
+          "playback_end": 120.0,
+          "animation_start": 1.0,
+          "animation_end": 200.0,
+          "time_unit": "film",
+          "fps": 24
+        },
+        "dry_run": false,
+        "committed": false
+      }
+    },
+    {
+      "name": "frame_range",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "selection.get",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "selection.get",
+        "read_only": true,
+        "status": "ok",
+        "result": {
+          "count": 0,
+          "nodes": []
+        },
+        "dry_run": false,
+        "committed": false
+      }
+    },
+    {
+      "name": "selection.get",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "rig.hierarchy",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "rig.hierarchy",
+        "read_only": true,
+        "status": "ok",
+        "result": {
+          "root": "root",
+          "joint_count": 2,
+          "truncated": false,
+          "joints": [
+            {
+              "name": "root",
+              "depth": 0,
+              "type": "joint",
+              "child_count": 1
+            },
+            {
+              "name": "|root|spine",
+              "depth": 1,
+              "type": "joint",
+              "child_count": 0
+            }
+          ]
+        },
+        "dry_run": false,
+        "committed": false
+      }
+    },
+    {
+      "name": "hierarchy.two_joints",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "rig.skin_info",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "rig.skin_info",
+        "read_only": true,
+        "status": "ok",
+        "result": {
+          "mesh": "body",
+          "skinned": true,
+          "clusters": [
+            {
+              "skinCluster": "body_skin",
+              "influence_count": 2,
+              "influences": [
+                "root",
+                "spine"
+              ],
+              "influences_truncated": false,
+              "max_influences": 2,
+              "sampled_vertices": 8,
+              "max_weight_sum_deviation": 0.0
+            }
+          ]
+        },
+        "dry_run": false,
+        "committed": false
+      }
+    },
+    {
+      "name": "skin_info.skinned",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "rig.influences",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "rig.influences",
+        "read_only": true,
+        "status": "ok",
+        "result": {
+          "joint": "root",
+          "mesh_count": 1,
+          "skins": [
+            {
+              "skinCluster": "body_skin",
+              "geometry": [
+                "bodyShape"
+              ]
+            }
+          ]
+        },
+        "dry_run": false,
+        "committed": false
+      }
+    },
+    {
+      "name": "influences.mesh",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "rig.connections",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "rig.connections",
+        "read_only": true,
+        "status": "ok",
+        "result": {
+          "node": "body",
+          "direction": "both",
+          "count": 0,
+          "connections": []
+        },
+        "dry_run": false,
+        "committed": false
+      }
+    },
+    {
+      "name": "connections.ok",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "create.locator",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "node.create",
+        "read_only": false,
+        "status": "committed",
+        "dry_run": false,
+        "committed": true,
+        "result": {
+          "created": "probe_loc",
+          "kind": "locator",
+          "name": "probe_loc",
+          "type": "transform",
+          "parent": "",
+          "position": [
+            1.0,
+            2.0,
+            3.0
+          ],
+          "full_path": "|probe_loc"
+        },
+        "preview": {
+          "operation": "CREATE",
+          "kind": "locator",
+          "name": "probe_loc",
+          "parent": "<world>",
+          "position": [
+            1,
+            2,
+            3
+          ],
+          "effect": "场景新增 1 个节点，可用 scene.undo_tak 撤销"
+        },
+        "confirm_token": "w_KMZK_tpG1B_KHe9Fv0akjj"
+      }
+    },
+    {
+      "name": "create.locator.exists",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "create.joint",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "node.create",
+        "read_only": false,
+        "status": "committed",
+        "dry_run": false,
+        "committed": true,
+        "result": {
+          "created": "probe_joint",
+          "kind": "joint",
+          "name": "probe_joint",
+          "type": "joint",
+          "parent": "",
+          "position": [
+            1.0,
+            2.0,
+            3.0
+          ],
+          "full_path": "|probe_joint"
+        },
+        "preview": {
+          "operation": "CREATE",
+          "kind": "joint",
+          "name": "probe_joint",
+          "parent": "<world>",
+          "position": [
+            1,
+            2,
+            3
+          ],
+          "effect": "场景新增 1 个节点，可用 scene.undo_tak 撤销"
+        },
+        "confirm_token": "vaJeHynFo0CLsA4nwCg-Uzp3"
+      }
+    },
+    {
+      "name": "create.joint.exists",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "create.group",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "node.create",
+        "read_only": false,
+        "status": "committed",
+        "dry_run": false,
+        "committed": true,
+        "result": {
+          "created": "probe_grp",
+          "kind": "group",
+          "name": "probe_grp",
+          "type": "transform",
+          "parent": "",
+          "position": [
+            1.0,
+            2.0,
+            3.0
+          ],
+          "full_path": "|probe_grp"
+        },
+        "preview": {
+          "operation": "CREATE",
+          "kind": "group",
+          "name": "probe_grp",
+          "parent": "<world>",
+          "position": [
+            1,
+            2,
+            3
+          ],
+          "effect": "场景新增 1 个节点，可用 scene.undo_tak 撤销"
+        },
+        "confirm_token": "7BmCSBHKYFscHC1lLi-8ZyPb"
+      }
+    },
+    {
+      "name": "create.group.exists",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "create.cube",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "node.create",
+        "read_only": false,
+        "status": "committed",
+        "dry_run": false,
+        "committed": true,
+        "result": {
+          "created": "probe_cube",
+          "kind": "cube",
+          "name": "probe_cube",
+          "type": "transform",
+          "parent": "",
+          "position": [
+            1.0,
+            2.0,
+            3.0
+          ],
+          "full_path": "|probe_cube"
+        },
+        "preview": {
+          "operation": "CREATE",
+          "kind": "cube",
+          "name": "probe_cube",
+          "parent": "<world>",
+          "position": [
+            1,
+            2,
+            3
+          ],
+          "effect": "场景新增 1 个节点，可用 scene.undo_tak 撤销"
+        },
+        "confirm_token": "hqCRULGvbaOMuffm75tgCSQ2"
+      }
+    },
+    {
+      "name": "create.cube.exists",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "create.control",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "node.create",
+        "read_only": false,
+        "status": "committed",
+        "dry_run": false,
+        "committed": true,
+        "result": {
+          "created": "probe_ctrl",
+          "kind": "control",
+          "name": "probe_ctrl",
+          "type": "transform",
+          "parent": "",
+          "position": [
+            1.0,
+            2.0,
+            3.0
+          ],
+          "full_path": "|probe_ctrl"
+        },
+        "preview": {
+          "operation": "CREATE",
+          "kind": "control",
+          "name": "probe_ctrl",
+          "parent": "<world>",
+          "position": [
+            1,
+            2,
+            3
+          ],
+          "effect": "场景新增 1 个节点，可用 scene.undo_tak 撤销"
+        },
+        "confirm_token": "4jAEms7cHhVfF1VnRdbWCghk"
+      }
+    },
+    {
+      "name": "create.control.exists",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "create.position",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "node.parent",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "node.parent",
+        "read_only": false,
+        "status": "committed",
+        "dry_run": false,
+        "committed": true,
+        "result": {
+          "node": "probe_loc",
+          "parent": "probe_grp",
+          "result": "probe_loc"
+        },
+        "preview": {
+          "operation": "REPARENT",
+          "params": {
+            "node": "probe_loc",
+            "parent": "probe_grp"
+          },
+          "effect": "可用 scene.undo_tak 撤销"
+        },
+        "confirm_token": "W8A8ylIRpyU9MwGO7alNMeUU"
+      }
+    },
+    {
+      "name": "parent.attached",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "attr.set.locked_refused",
+      "ok": true,
+      "value": {
+        "ok": false,
+        "action": "attr.set",
+        "error": "ValueError: 属性被锁定：body.translateX（常见于被蒙皮/约束连接的变换通道）。TAK 不擅自解锁，请在 Maya 里解锁后再试，或改一个未锁定的属性。（已回滚）",
+        "status": "error",
+        "committed": false
+      }
+    },
+    {
+      "name": "attr.set.locked_refused",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "attr.set",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "attr.set",
+        "read_only": false,
+        "status": "committed",
+        "dry_run": false,
+        "committed": true,
+        "result": {
+          "node": "probe_loc",
+          "attribute": "translateY",
+          "old": 0.0,
+          "new": 2.5,
+          "new_readback": 2.5,
+          "attr_type": "doubleLinear"
+        },
+        "preview": {
+          "operation": "SET_ATTR",
+          "params": {
+            "node": "probe_loc",
+            "attribute": "translateY",
+            "value": "2.5"
+          },
+          "effect": "可用 scene.undo_tak 撤销"
+        },
+        "confirm_token": "6iv8rKuaQQKEM3BMiyO9VFOe"
+      }
+    },
+    {
+      "name": "attr.set.applied",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "node.rename",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "node.rename",
+        "read_only": false,
+        "status": "committed",
+        "dry_run": false,
+        "committed": true,
+        "result": {
+          "before": "probe_cube",
+          "after": "probe_cube_new"
+        },
+        "preview": {
+          "operation": "RENAME",
+          "params": {
+            "node": "probe_cube",
+            "name": "probe_cube_new"
+          },
+          "effect": "可用 scene.undo_tak 撤销"
+        },
+        "confirm_token": "JP06NpgtWySCrfDn-9dagWox"
+      }
+    },
+    {
+      "name": "rename.applied",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "selection.set",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "selection.set",
+        "read_only": false,
+        "status": "committed",
+        "dry_run": false,
+        "committed": true,
+        "result": {
+          "selection": [
+            "root",
+            "spine"
+          ],
+          "count": 2
+        },
+        "preview": {
+          "operation": "SELECT",
+          "params": {
+            "nodes": [
+              "root",
+              "spine"
+            ]
+          },
+          "effect": "可用 scene.undo_tak 撤销"
+        },
+        "confirm_token": "wPHlriWXWCKs3KIpBnM-iGW1"
+      }
+    },
+    {
+      "name": "selection.set.applied",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "node.delete",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "node.delete",
+        "read_only": false,
+        "status": "committed",
+        "dry_run": false,
+        "committed": true,
+        "result": {
+          "deleted": "probe_joint",
+          "type": "joint",
+          "exists_after": false
+        },
+        "preview": {
+          "operation": "DELETE",
+          "params": {
+            "node": "probe_joint"
+          },
+          "effect": "可用 scene.undo_tak 撤销"
+        },
+        "confirm_token": "IJbF3wTgW7vW9apNRfvYiSAC"
+      }
+    },
+    {
+      "name": "delete.applied",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "scene.undo_tak",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "action": "scene.undo_tak",
+        "read_only": false,
+        "status": "committed",
+        "dry_run": false,
+        "committed": true,
+        "result": {
+          "ok": true,
+          "undone": "node.delete"
+        },
+        "preview": {
+          "operation": "UNDO",
+          "params": {},
+          "effect": "可用 scene.undo_tak 撤销"
+        },
+        "confirm_token": "XbTWFWBPiwzgZoEGwSyCJA6v"
+      }
+    },
+    {
+      "name": "undo.restored",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "bridge.start",
+      "ok": true,
+      "value": {
+        "running": true,
+        "dcc": "maya",
+        "host": "127.0.0.1",
+        "port": 51927,
+        "url": "http://127.0.0.1:51927",
+        "endpoints": [
+          "GET  /bridge/health",
+          "GET  /bridge/tools",
+          "GET  /bridge/scene[?full=1]",
+          "GET  /bridge/actions",
+          "POST /bridge/run     {tool_id, options?}",
+          "POST /bridge/chat    {message, session_id?}",
+          "POST /bridge/act     {action, params?, confirm?, dry_run?, confirm_token?}"
+        ],
+        "bridge_version": "1.0",
+        "started_at": "2026-11-14 18:53:38",
+        "calls": 0,
+        "call_timeout": 15.0,
+        "thread_safe": false,
+        "thread_note": "maya 未注册主线程执行器（宿主调用将直调，跨线程时不安全）",
+        "allow_write": false,
+        "discovery": "C:\\Users\\NYAO\\AppData\\Local\\Temp\\tak_scene_probe_rop0xkz2\\bridge.json",
+        "last_error": "",
+        "ok": true
+      }
+    },
+    {
+      "name": "bridge.running",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "bridge.actions",
+      "ok": true,
+      "value": "{\"ok\": true, \"count\": 18, \"actions\": [{\"name\": \"attr.set\", \"mcp_name\": \"tak_attr_set\", \"description\": \"设置节点属性（数值 / 布尔 / 字符串 / 三元组）\", \"group\": \"write\", \"dcc\": \"\", \"read_only\": false, \"implemented\": true, \"permissions\": [\"node.write\"], \"params\": {\"node\": {\"type\": \"string\", \"description\": \"节点名（支持 Maya 全路径）\"}, \"attribute\": {\"type\": \"string\", \"description\": \"属性名\"}, \"value\": {\"description\": \"新值\"}}}, {\"name\": \"node.create\", \"mcp_name\": \"tak_node_create\", \"description\": \"创建资产：空组 / 定位器 / 关节 / 控制器圆圈 / 多边形立方体\", \"group\": \"write\", \"dcc\": \"\", \"read_only\": false, \"implemented\": true, \"permissions\": [\"node.write\"], \"params\": {\"kind\": {\"type\": \"string\", \"description\": \"创建什么\", \"enum\": [\"group\", \"locator\", \"joint\", \"control\", \"cube\"]}, \"name\": {\"type\": \"string\", \"description\": \"名字（不含命名空间）\"}, \"parent\": {\"type ...(truncated)"
+    },
+    {
+      "name": "bridge.actions.count>=18",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "mcp.tools/list",
+      "ok": true,
+      "value": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"tools\": [{\"name\": \"tak_attr_set\", \"description\": \"设置节点属性（数值 / 布尔 / 字符串 / 三元组）（写操作：首次调用只返回 dry-run 预览与 confirm_token，需带 token 再次调用才会执行）\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"node\": {\"type\": \"string\", \"description\": \"节点名（支持 Maya 全路径）\"}, \"attribute\": {\"type\": \"string\", \"description\": \"属性名\"}, \"value\": {\"description\": \"新值\"}, \"confirm_token\": {\"type\": \"string\", \"description\": \"第二次调用时填第一次返回的 confirm_token；填了即表示人已确认，动作会真正执行（还需 DCC 面板打开「允许 MCP 写入」）\"}, \"confirm\": {\"type\": \"boolean\", \"description\": \"与 confirm_token 一起为 true 时才会写场景；缺省只做 dry-run\"}}, \"required\": [\"node\", \"attribute\", \"value\"], \"additionalProperties\": false}}, {\"name\": \"tak_node_create\", \"description\": \"创建资产：空组 / 定位器 / 关节 / 控制器圆圈 / 多边形立方体（写操作：首次调用只返回 dry-run 预览与 confirm_token，需带 token ...(truncated)"
+    },
+    {
+      "name": "mcp.tools>=20",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "mcp.tools/call scene.summary",
+      "ok": true,
+      "value": "{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"content\": [{\"type\": \"text\", \"text\": \"{\\n  \\\"ok\\\": true,\\n  \\\"action\\\": \\\"scene.summary\\\",\\n  \\\"read_only\\\": true,\\n  \\\"status\\\": \\\"ok\\\",\\n  \\\"result\\\": {\\n    \\\"scene\\\": \\\"\\\",\\n    \\\"scene_name\\\": \\\"\\\",\\n    \\\"dcc\\\": \\\"maya\\\",\\n    \\\"frame_range\\\": [\\n      1.0,\\n      120.0\\n    ],\\n    \\\"current_frame\\\": 1.0,\\n    \\\"linear_unit\\\": \\\"\\\",\\n    \\\"time_unit\\\": \\\"\\\",\\n    \\\"counts\\\": {\\n      \\\"transform\\\": 13,\\n      \\\"joint\\\": 3,\\n      \\\"mesh\\\": 3,\\n      \\\"skinCluster\\\": 1,\\n      \\\"nurbsCurve\\\": 2\\n    },\\n    \\\"selection\\\": [],\\n    \\\"selection_error\\\": \\\"TypeError: 必须为标志“sl”传递一个布尔参数\\\",\\n    \\\"modified\\\": false\\n  },\\n  \\\"dry_run\\\": false,\\n  \\\"committed\\\": false,\\n  \\\"allow_write\\\": false,\\n  \\\"dcc\\\": \\\"maya\\\",\\n  \\\"http_status\\\": 200\\n}\"}], \"isE ...(truncated)"
+    },
+    {
+      "name": "mcp.read.real_scene",
+      "ok": true,
+      "value": "{\"ok\": true, \"action\": \"scene.summary\", \"read_only\": true, \"status\": \"ok\", \"result\": {\"scene\": \"\", \"scene_name\": \"\", \"dcc\": \"maya\", \"frame_range\": [1.0, 120.0], \"current_frame\": 1.0, \"linear_unit\": \"\""
+    },
+    {
+      "name": "mcp.tools/call dry_run",
+      "ok": true,
+      "value": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"action\": \"node.create\",\n  \"read_only\": false,\n  \"status\": \"dry_run\",\n  \"dry_run\": true,\n  \"committed\": false,\n  \"preview\": {\n    \"operation\": \"CREATE\",\n    \"kind\": \"locator\",\n    \"name\": \"mcp_created_loc\",\n    \"parent\": \"<world>\",\n    \"position\": [\n      0,\n      0,\n      0\n    ],\n    \"effect\": \"场景新增 1 个节点，可用 scene.undo_tak 撤销\"\n  },\n  \"confirm_token\": \"7Jn3JcCobC4-OzpR7MjpM2-e\",\n  \"required_permissions\": [\n    \"node.write\"\n  ],\n  \"hint\": \"确认无误后再次调用：confirm=True, dry_run=False, confirm_token=该值（token 绑定动作与参数，改参数需重新预览）\",\n  \"allow_write\": false,\n  \"dcc\": \"maya\",\n  \"http_status\": 200\n}"
+            }
+          ],
+          "isError": false
+        }
+      }
+    },
+    {
+      "name": "mcp.dry_run",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "mcp.commit_blocked",
+      "ok": true,
+      "value": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": false,\n  \"error\": \"外部写入未启用：请在 DCC 面板勾选「允许 MCP 写入」，或执行 tak.core.bridge.set_allow_write(True)。去掉 confirm 可先拿 dry-run 预览。\",\n  \"allow_write\": false,\n  \"action\": \"node.create\",\n  \"status\": 400\n}"
+            }
+          ],
+          "isError": true
+        }
+      }
+    },
+    {
+      "name": "mcp.write_switch_blocks",
+      "ok": true,
+      "value": ""
+    },
+    {
+      "name": "mcp.commit",
+      "ok": true,
+      "value": "{\"jsonrpc\": \"2.0\", \"id\": 5, \"result\": {\"content\": [{\"type\": \"text\", \"text\": \"{\\n  \\\"ok\\\": true,\\n  \\\"action\\\": \\\"node.create\\\",\\n  \\\"read_only\\\": false,\\n  \\\"status\\\": \\\"committed\\\",\\n  \\\"dry_run\\\": false,\\n  \\\"committed\\\": true,\\n  \\\"result\\\": {\\n    \\\"created\\\": \\\"mcp_created_loc\\\",\\n    \\\"kind\\\": \\\"locator\\\",\\n    \\\"name\\\": \\\"mcp_created_loc\\\",\\n    \\\"type\\\": \\\"transform\\\",\\n    \\\"parent\\\": \\\"\\\",\\n    \\\"position\\\": [\\n      0.0,\\n      0.0,\\n      0.0\\n    ],\\n    \\\"full_path\\\": \\\"|mcp_created_loc\\\"\\n  },\\n  \\\"preview\\\": {\\n    \\\"operation\\\": \\\"CREATE\\\",\\n    \\\"kind\\\": \\\"locator\\\",\\n    \\\"name\\\": \\\"mcp_created_loc\\\",\\n    \\\"parent\\\": \\\"<world>\\\",\\n    \\\"position\\\": [\\n      0,\\n      0,\\n      0\\n    ],\\n    \\\"effect\\\": \\\"场景新增 1 个节点，可用 scene.undo_tak 撤销\\\"\\n  },\\n  \\\"confirm_token\\\": \\\"7 ...(truncated)"
+    },
+    {
+      "name": "mcp.created_node",
+      "ok": true,
+      "value": "{\"ok\": true, \"action\": \"node.create\", \"read_only\": false, \"status\": \"committed\", \"dry_run\": false, \"committed\": true, \"result\": {\"created\": \"mcp_created_loc\", \"kind\": \"locator\", \"name\": \"mcp_created_loc\", \"type\": \"transf"
+    },
+    {
+      "name": "bridge.stop",
+      "ok": true,
+      "value": {
+        "ok": true,
+        "stopped": true,
+        "port": 51927
+      }
+    }
+  ],
+  "errors": [],
+  "actions_tested": [
+    "attr.set",
+    "node.create",
+    "node.delete",
+    "node.parent",
+    "node.rename",
+    "rig.connections",
+    "rig.hierarchy",
+    "rig.influences",
+    "rig.skin_info",
+    "scene.find",
+    "scene.frame_range",
+    "scene.get_attr",
+    "scene.get_node",
+    "scene.list_nodes",
+    "scene.summary",
+    "scene.undo_tak",
+    "selection.get",
+    "selection.set"
+  ],
+  "maya_version": "2026",
+  "registered_actions": 18,
+  "implemented_actions": 18,
+  "unique_actions_tested": 18
+}

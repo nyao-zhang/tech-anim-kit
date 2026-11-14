@@ -155,6 +155,36 @@ class OpenAIClient:
                                 time.monotonic() - started)
         return content
 
+    def chat_tools(self, messages: List[Dict[str, Any]],
+                   tools: List[Dict[str, Any]], model: Optional[str] = None,
+                   tool_choice: Any = "auto", **kwargs: Any) -> Dict[str, Any]:
+        """带 function calling 的 chat/completions，返回**完整** assistant message。
+
+        和 :meth:`chat` 的区别：这里要的是 ``message.tool_calls``，不是 content
+        字符串。模型只被允许输出「动作名 + 参数 JSON」，参数是否合法仍由
+        ``tak.core.scene_actions`` 的白名单校验说了算 —— 模型说的话绝不当代码跑。
+        """
+        payload = dict(kwargs)
+        payload.update({"model": model or self.model, "messages": messages,
+                        "tools": tools, "tool_choice": tool_choice})
+        started = time.monotonic()
+        try:
+            response = self._post("/chat/completions", payload)
+            message = response["choices"][0]["message"]
+            if not isinstance(message, dict):
+                raise TypeError("message 不是对象")
+        except Exception as exc:
+            self.budget.record_call(estimate_tokens(payload),
+                                    time.monotonic() - started, failed=True)
+            if isinstance(exc, AIError):
+                raise
+            if isinstance(exc, (KeyError, IndexError, TypeError)):
+                raise AIParseError("chat/completions 响应结构不完整: %s" % exc) from exc
+            raise
+        self.budget.record_call(estimate_tokens(payload) + estimate_tokens(message),
+                                time.monotonic() - started)
+        return message
+
     def vision(self, images: List[str], prompt: str, model: Optional[str] = None,
                **kwargs: Any) -> str:
         """使用 OpenAI image_url 内容块发送图片 URL 或 data URI。"""

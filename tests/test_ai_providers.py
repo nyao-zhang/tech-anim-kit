@@ -76,7 +76,10 @@ def test_task_routing_uses_three_model_tiers():
     assert provider_for_task("unknown") == MODEL_DEEPSEEK
 
 
-def test_get_provider_routes_task_and_allows_model_override(monkeypatch):
+def test_get_provider_routes_task_and_allows_model_override(tmp_path, monkeypatch):
+    # 隔离真实 ~/.tak：用户机器上配了 ai.model 与 credential.json 之后，
+    # 面板配置会覆盖任务路由，这个测试的本意是「未显式配置时按任务分工」。
+    monkeypatch.setenv("TAK_HOME", str(tmp_path))
     monkeypatch.setenv("TAK_AI_API_KEY", "test-only")
     monkeypatch.setenv("TAK_AI_BASE_URL", "https://example.invalid/v1")
     provider = get_provider(task="vision", offline=False)
@@ -86,8 +89,11 @@ def test_get_provider_routes_task_and_allows_model_override(monkeypatch):
     assert get_provider(task="vision", model="custom-model", offline=False).model == "custom-model"
 
 
-def test_missing_configuration_and_explicit_offline_fall_back(monkeypatch):
+def test_missing_configuration_and_explicit_offline_fall_back(tmp_path, monkeypatch):
+    # 同上：不隔离的话本机 credential.json 里的真实 key 会让「缺配置」不成立。
+    monkeypatch.setenv("TAK_HOME", str(tmp_path))
     monkeypatch.delenv("TAK_AI_API_KEY", raising=False)
+    monkeypatch.delenv("TAK_AI_OFFLINE", raising=False)
     assert isinstance(get_provider(offline=False), MockProvider)
     monkeypatch.setenv("TAK_AI_API_KEY", "test-only")
     assert isinstance(get_provider(offline=True), MockProvider)

@@ -1,12 +1,25 @@
 # 对话式控制台（`agent_console`）
 
-> 用一句中文问出「哪里不对、怎么修、规范怎么写、现在什么状态」，回答里带结构化候选与 dry-run 预览；写场景永远要你亲手确认。
+> 用一句中文查当前场景、骨架与蒙皮，或创建、改名、删除节点；写操作先出 dry-run 预览，你点「执行」才落地。同一套动作经 MCP 暴露给外部 AI。旧的规则问答与候选计划仍然保留。
 
-**适用版本** TAK `0.3.2`　·　**DCC** maya / max / mobu / unreal　·　**权限** `scene.read` / `node.write`　·　**UI** `both`
+**适用版本** TAK `0.7.0`　·　**DCC** maya / max / mobu / unreal（真实宿主动作目前只有 Maya）　·　**权限** `scene.read` / `node.write`　·　**UI** `both`
 
 ## 1. 它解决什么问题
 
-体检报告列出十条问题之后，真正费时的是回想「这条规则什么意思」「改哪个节点」「会不会把导出搞坏」。控制台把这段接过来：你把问题原话打进去，它回一段人话，规则 id 和节点名都带在里面，不用回头翻报告。
+**v0.7.0 之前这里答非所问**：旧控制台只有正则匹配的五种问法、4 个规范修复动作，仓里没有 MCP 代码，用户想要的「直接提需求 → 查场景 → 改场景 → 建资产」一条都做不到。v0.7.0 补上了 18 个受限场景动作、真实的 Maya 宿主实现、面板内的人工确认执行，以及一个 stdio MCP server。详见 [MCP 接入文档](../mcp.md)。
+
+现在输入框能干四件事：
+
+| 你说 | 它做 |
+|---|---|
+| 「场景里有多少关节」「列出所有控制器」「查 body 的蒙皮」「找 foot 相关的节点」 | 查询当前场景、节点、选择集、骨架层级、skinCluster 影响数与权重偏差、连接关系 |
+| 「查 root 的层级」「root 影响了哪些网格」 | 查绑定逻辑 |
+| 「创建一个 locator 叫 foot_ctrl」「把 pCube1 改名为 body」「删除 pCube1」 | 生成写操作预览，你点「执行」后真的改场景，可「撤销上一次」 |
+| 「解释一下命名问题」「搜索蒙皮权重上限」 | 旧的确定性规则问答与知识库检索（保留，不再冒充「对话式 Agent」） |
+
+配了 AI 端点时走 OpenAI 兼容 function calling，任意说法都能解析；没配时走本地关键词解析，覆盖上表的高频句式，解析不出来会明确提示而不是瞎猜。
+
+体检报告列出十条问题之后，真正费时的是回想「这条规则什么意思」「改哪个节点」「会不会把导出搞坏」。旧的规则问答把这段接过来：你把问题原话打进去，它回一段人话，规则 id 和节点名都带在里面，不用回头翻报告。
 
 第二种场景是「知道要改，但不想手敲」。它从当前快照确定性推导出参数化修复候选，并把每个动作要对哪个节点做什么、需要什么权限摊成一份 dry-run 预览。不满意就丢掉，满意再走确认流程。
 
@@ -27,8 +40,11 @@
 |---|---|
 | `桥接：未启动（外部调不进来）　[启动桥接]` | 点一下起本地桥，再点是停；地址直接显示在标签上。要 token、发现文件路径和 curl 示例时点「详情」 |
 | `[AI 连接]` | 三步向导：选服务商 → 粘密钥 → 测试连接。密钥存 `~/.tak/credential.json`，不进 `config.json` |
+| `允许写入（面板 + MCP）` | 默认**关**。关着时只能查询与预览；打开后写操作仍需 dry-run + 点「执行」 |
+| `[执行]` / `[撤销上一次]` | 执行上一次预览的写操作 / 撤销最近一次 TAK 写入 |
+| `[MCP 配置]` | 输出并复制可直接粘进 WorkBuddy 的 `mcpServers` 配置片段 |
 
-两者互不依赖：不开 AI 也能让外部调工具；不开桥也能本地用 mock 对话。
+两者互不依赖：不开 AI 也能让外部调工具（本地关键词解析照常可用）；不开桥也能在面板里查改本机场景。桥开着 + 打开写入 + 配好 MCP，外部 AI 才能改场景，见 [MCP 文档](../mcp.md)。
 
 ```python
 from tools.agent_console import core
@@ -47,7 +63,7 @@ POST /api/agent
 
 ## 3. 输入
 
-`tools/agent_console/core.py` 的四个入口，默认值与代码签名一致：
+`tools/agent_console/core.py` 的入口，默认值与代码签名一致。前四个是 v0.6 及以前的规则问答/计划链路，后五个是 v0.7.0 的场景动作链路：
 
 | 函数 | 签名 | 说明 |
 |---|---|---|
@@ -55,6 +71,11 @@ POST /api/agent
 | `chat` | `(message, snapshot=None, session_id="default", spec=None, **kwargs)` | `message` 可换成整个 JSON body（dict）；会话不存在时自动新建，`spec` 只在新建时生效 |
 | `confirm` | `(plan_id, confirm=False, granted=None, dry_run=True, session_id="default")` | `plan_id` 也可传整个 body；`granted=None` 时用会话 `permissions`；会话不存在时返回 `ok=false` |
 | `run_report` | `(ctx)` | 读 `ctx.snapshot` / `ctx.spec` / `ctx.dcc`，返回只读 `Report` |
+| `command` | `(message="", *, calls=None, dcc="maya", allow_write=False, execute=False, use_model=True, provider=None)` | **自然语言主入口**。`calls` 为空时解析句子并返回动作结果（写操作只给预览 + `confirm_token`）；`calls` 非空时执行带 token 的批次（UI 点「执行」） |
+| `actions` | `(dcc="maya")` | 列出 18 个场景动作、参数、权限、是否已实现 |
+| `undo` | `(dcc="maya")` | 撤销最近一次 TAK 写入 |
+| `mcp_config` | `()` | 返回 `mcpServers` 配置片段 |
+| `write_enabled` / `set_write_enabled` | `()` / `(bool)` | 读 / 写「允许写入」开关（持久化到 `config.json` 的 `bridge.allow_write`） |
 
 `AgentSession` 类签名与 `create_session` 一致，另有 `propose(payload, snapshot=None)`、`history()`、`audit()`、`pending_plans()`、`describe()`、`reset()`。
 
@@ -94,6 +115,21 @@ POST /api/agent
 `confirm()` 返回 `ok` / `status`（`committed` / `dry_run` / `failed`）/ `plan_id` / `session_id` / `dry_run` / `committed` / `preview` / `required_permissions` / `granted` / `result`；出错时 `ok=false` + `error`。
 
 `run_report(ctx)` 的 `metadata` 键：`tool_id`、`session`、`capabilities`、`safety`、`candidates`、`candidate_count`、`preview`、`plan`、`plan_error`、`explanations`、`chat_turns`、`dry_run_only`。
+
+`command()` 的返回（v0.7.0）：`ok` / `message` / `mode`（`model` / `local` / `local-fallback` / `preview` / `execute`）/ `reply` / `hint` / `model_error` / `results` / `calls` / `need_confirm` / `allow_write` / `dcc`。`results[]` 每项含 `ok` / `action` / `params` / `read_only` / `status`（`ok` / `dry_run` / `committed` / `error`）/ `result` 或 `preview` 或 `error` / `committed`。
+
+```json
+{"ok": true, "mode": "local", "need_confirm": true,
+ "results": [{"ok": true, "action": "node.create",
+              "status": "dry_run", "committed": false,
+              "preview": {"operation": "CREATE", "name": "foot_ctrl"},
+              "confirm_token": "Xgd..."}],
+ "calls": [{"action": "node.create",
+            "params": {"kind": "locator", "name": "foot_ctrl"},
+            "confirm_token": "Xgd..."}]}
+```
+
+把 `calls` 原样回传并置 `execute=True`、`allow_write=True` 才会真正写入。查询类动作在第一次调用就直接返回 `status=ok` 的数据，不需要确认。
 
 ## 5. 内部机制
 
@@ -186,6 +222,28 @@ confirm(confirm=True, dry_run=False, granted=[...])  -> ok=true   status=committ
 | 是否执行 | 你的 `confirm` / `granted` / `dry_run` |
 | 多出来的那段话 | AI，只影响 `reply` 末尾一句 |
 
+上表描述的是**旧的规则问答链路**（`chat` / `confirm`）。新的场景动作链路是另一条路，两者共用同一个输入框但不共用执行器。
+
+### 5.7 场景动作链路（v0.7.0）
+
+```text
+自然语言 / MCP tools/call
+  -> tak.core.ai.commands.resolve()     有 key 走 function calling，失败降级本地关键词
+  -> tak.core.scene_actions.REGISTRY   18 个动作白名单 + 参数 schema 校验
+  -> 写操作：dry-run 预览 + 一次性 confirm_token（绑定动作与参数）
+  -> 人工点「执行」/ 带 token 二次调用
+  -> 权限 granted + undo chunk
+  -> tak.adapters.maya.scene_ops       真正的 maya.cmds 调用
+```
+
+三处硬约束：
+
+1. `tak/core` 零 DCC import，宿主 handler 由适配器在导入时注册；没实现的动作调用时明确报错，不静默假装成功。
+2. 模型只能输出动作名 + 参数 JSON，不能输出代码；参数还要过类型 / 枚举 / 范围 / 未知参数校验。
+3. 写操作两阶段且 token 一次性；`bridge.allow_write` 默认关，是外部调用的总闸。`undo` 只在「TAK 写入后没有其它宿主操作」时生效，避免误撤用户自己的改动。
+
+`tools/agent_console/core.py` 里的 `command` / `actions` / `undo` 只是薄封装；同一张注册表同时被桥的 `/bridge/act` 和 MCP server 使用，所以面板、HTTP、MCP 三处看到的动作清单与安全边界完全一致。
+
 ## 6. 典型用法
 
 ### 6.1 只看确定性部分：`run_report`
@@ -250,7 +308,11 @@ dry_run
 
 ## 7. 边界与限制
 
-- **chat 绝不写场景。** `chat()` 全程不调 `ACTION_REGISTRY.execute`；`safety.chat_writes_scene` 明写 `false`。唯一写入口是 `confirm(plan_id, confirm=True, dry_run=False, granted=[...])`。
+- **旧的 `chat` / `confirm` 链路绝不写场景。** `chat()` 全程不调 `ACTION_REGISTRY.execute`；`safety.chat_writes_scene` 明写 `false`。那条链路的唯一写入口是 `confirm(plan_id, confirm=True, dry_run=False, granted=[...])`。
+- **新的 `command` 链路会写场景，但只能由人触发。** 写操作必须先 dry-run 拿 token，再由人在面板点「执行」（或 MCP 客户端带 token 二次调用），且 `bridge.allow_write` 必须为 `true`。AI 无法自己生成有效 token。
+- **宿主动作目前只有 Maya 实现。** 能力表对四端都可见，但 Max / MoBu / UE 调用时返回「当前 DCC 没有宿主实现」，不假装成功。
+- **被锁定的属性拒绝修改。** 常见于被蒙皮或约束连接的变换通道，TAK 不擅自解锁；Maya 真机探针验证过这条。
+- **面板里的模型调用是同步的。** 端点超时设 12 秒并只重试一次，超时自动降级为本地关键词解析，避免 Maya 界面长时间假死。
 - **LLM 绝不生成 DCC 脚本。** 模型输出只拼进 `reply`；没有路径把模型字符串当代码或计划解析。`propose()` 是唯一能把外部 JSON 变计划的入口，第一站就是 `build_plan`。
 - **候选面很窄。** 只有 4 个动作、只覆盖权重 / 命名空间 / 负缩放三类信号。没问题就是空候选，不凑数。
 - **`rename_joint` 永远缺目标名。** 推导器不写 `name`，所以这条在真实 adapter 上走 `skipped`。猜错名字比不改更危险，这是刻意的。
@@ -267,3 +329,5 @@ dry_run
 - **知识库与 AI 层**：SEARCH 直接 `from tak.core.knowledge import KnowledgeBase`，与 `rig_kb` 共用同一内核；`get_provider()` 默认 mock，`TASK_ROUTING` 里 `explain` / `candidate` 指向 `DeepSeek-V4.1-Flash`，只在真实 provider 生效时才有意义。
 - **Web 面板**：`/api/agent` 直接持有 `AgentSession`，不经过 `tools/agent_console/core.py`；后者是给 `runner` / 脚本 / Qt 面板用的薄封装。两条路复用同一份 `tak.core.agent`。
 - **未调用 `motion_library`**：`AgentSession._knowledge_context` 只查知识库，动作上下文需要调用方自己把 `motion_library.context_for(...)` 的结果塞进 `message` 或 `snapshot`。
+- **MCP 与桥**：`tak/mcp/server.py` 把 `tak.core.scene_actions` 的动作表暴露为 `tools/list`，`tools/call` 经 `tak.core.bridge.call()` 转发到 `/bridge/act`。配置与安全边界见 [MCP 文档](../mcp.md)。
+- **真机验证**：`validation/maya_scene_actions_probe.py` 用 Maya 2026 standalone 跑过 18 个动作、撤销、桥与 MCP 写入，结果 `ok=true`（63 步）。

@@ -13,6 +13,59 @@
 
 （无）
 
+## [0.7.0] - 2026-11-14
+
+一句话：**把「对话式控制台」从规则问答器改成真能查/改场景的 Agent 入口，并首次提供 MCP 接入**。
+
+起因是用户的一句质疑：「我理解和需求的应该是可以直接提出需求，然后通过 MCP 去修改场景或者创建资产或者帮我查询当前场景或者绑定逻辑」。核对后确认旧实现确实做不到：只有 5 类正则问法、4 个 `spec_enforcer` 规范修复动作、回答来自规则引擎、仓里没有任何 MCP 代码、外部只能自己拼 HTTP。
+
+### Added
+
+- **`tak/core/scene_actions.py`**：18 个受限场景动作的能力表与执行器。四类能力对齐用户诉求 —— 查询场景（`scene.summary` / `list_nodes` / `find` / `get_node` / `get_attr` / `frame_range` / `selection.get`）、查绑定逻辑（`rig.hierarchy` / `skin_info` / `influences` / `connections`）、创建资产（`node.create` 支持 group / locator / joint / 控制器圆圈 / 立方体）、修改场景（`rename` / `delete` / `parent` / `attr.set` / `selection.set` / `undo_tak`）。零 DCC import，宿主 handler 由适配器注册。
+- **写操作两阶段确认**：第一次调用必定只返回 dry-run 预览 + 一次性 `confirm_token`（绑定动作名与参数、5 分钟过期）；只有带同一 token 且 `confirm=True`、权限齐备才执行。模型无法自造 token，改一个参数即失效。执行包在 undo chunk 里，异常按 undo 队列长度差回滚。
+- **`tak/adapters/maya/scene_ops.py`**：Maya 2023+ 真实宿主实现，18 个动作全部落地；蒙皮信息含影响关节数、最大影响数与顶点权重和偏差抽样。
+- **`tak/mcp/`**：零第三方依赖的 stdio JSON-RPC 2.0 MCP server（`python -m tak.mcp`），支持 `initialize` / `tools/list` / `tools/call` / `ping` / notification；21 个 tools（18 个动作 + `tak_status` / `tak_list_actions` / `tak_undo`）。`--print-config` 直接输出可粘进 WorkBuddy / Claude Desktop 的 `mcpServers` 片段。MCP server 是纯 HTTP 客户端，**普通 Python 即可，不需要 Maya 解释器**。
+- **桥新增 `GET /bridge/actions` 与 `POST /bridge/act`**（`tak/core/bridge.py`），以及 `allow_write` / `set_allow_write`（默认 **false**）。写开关持久化在 `config.json` 的 `bridge.allow_write`，是外部调用的总闸。CLI 增加 `actions` / `act` / `write on|off`。
+- **`tak/core/ai/commands.py`**：自然语言 → 动作。配了 AI 端点走 OpenAI 兼容 function calling（`http_client.chat_tools()`），没配走本地关键词解析（覆盖上表高频句式，解析不出来明确提示并回退旧规则问答）。模型只输出动作名 + 参数 JSON，且要经过白名单/类型/枚举/范围/未知参数校验；**没有 eval / exec / 任意脚本执行**。
+- **面板**（`tools/agent_console/ui_qt.py`）：输入框改成真正的自然语言示例；新增「允许写入（面板 + MCP）」开关、`[执行]` / `[撤销上一次]` / `[MCP 配置]` 三个按钮与动作结果表；写操作必须人工点「执行」。插件 core 增加 `command` / `actions` / `undo` / `mcp_config` / `write_enabled` / `set_write_enabled`。
+- **文档**：新增 [docs/mcp.md](docs/mcp.md)（拓扑、三步接入、21 个工具表、两阶段写入示例、安全边界、排错）；改写 `docs/modules/agent_console.md` 与 `docs/MODULES.md` 8.1/8.4。
+- **真机探针** `validation/maya_scene_actions_probe.py`：Maya 2026 standalone 覆盖 18 个动作、5 种创建、撤销、桥与 MCP 真实写入；`TAK_HOME` 指到临时目录，绝不碰用户 `~/.tak`。
+
+### Changed
+
+- `tools/agent_console/core.py` 的 `info()` 能力清单增加 `nl.command` / `scene.query` / `scene.write` / `rig.query` / `mcp.tools`；旧的 `chat` / `confirm` / `run_report` 链路**完整保留**，不再冒充「对话式 Agent」。
+- `tak/core/config.py` 默认桥配置增加 `allow_write: false`。
+- 面板模型调用改为 12 秒超时 + 只重试一次 + 自动降级本地解析，避免 Maya 界面因端点慢而假死。
+
+### Fixed（真机与回归抓到的）
+
+- **`scene.undo_tak` 在 Maya 2026 永远失败**：`undoInfo(q=True, chunkName=True)` 实测返回空串，原实现据此判断「最近一次不是 TAK」而拒绝撤销。改为记录 TAK chunk 关闭时的 undo 队列长度，只有队列长度完全一致（说明之后没有别的操作）才 `cmds.undo()`，既不误撤也真能撤。
+- **`scene.summary` 经桥调用变 500**：HTTP 线程里 `cmds.ls(sl=True)` 偶发「必须为标志 sl 传递一个布尔参数」，一个选择集查询把整份摘要拖垮。改为每个子项独立兜底，并给 `selection.get` 明确的失败信息。
+- **`set_allow_write(True)` 写进去又被丢掉**：`config._normalize()` 只保留 `port` / `token` / `autostart`，新键在下次 `load()` 时消失，表现为「开关明明开了，外部写入仍被拒」。已在归一化与默认值两处补齐。
+- **`bridge.call()` 用 HTTP 码覆盖业务 `status`**：`dry_run` / `committed` / `error` 被 `200` 冲掉，客户端分不清预览和执行。改为 `http_status` 与业务 `status` 分离。
+- **本地解析抽不到名字**：`_NAME_HINT` 的前缀后没允许空格，「改名为 body」「叫 foot_ctrl」这类中文说法一个名字都取不到。已修，并补 12 条句式回归。
+- **4 个旧测试依赖真实 `~/.tak`**：本机配了 AI key 与 `ai.model` 后，`test_ai_providers.py` / `test_rig_health_guard.py` 的「缺配置」「离线模板」假设不成立而失败。测试改为用 `TAK_HOME` 指向 `tmp_path` 隔离用户配置，不改产品行为。
+- **锁定属性**：`attr.set` 现在明确说明「被蒙皮/约束连接锁定，TAK 不擅自解锁」，而不是给一句含糊的 `属性被锁定`。
+
+### Known limitations
+
+- **真实宿主动作目前只有 Maya 实现**。能力表对四端都可见，但 Max / MoBu / UE 调用时返回「当前 DCC 没有宿主实现」，不假装成功。
+- **MCP 客户端侧未在本机实配**：`python -m tak.mcp` 的协议往返、工具清单与写入已在真机探针与单元测试中验证，但把它挂进 WorkBuddy / Claude Desktop 并让客户端发起调用这一步需要用户按 `docs/mcp.md` 配一次后回传结果。
+- **`mayapy` standalone 没有 Qt 事件循环**，`executeInMainThreadWithResult` 的 idle 队列不推进，探针里把宿主执行器换成同线程直调。真实 Maya GUI 的线程切换由 `tak/adapters/maya/__init__.py` 注册的执行器保证，**这条切换本身不在 standalone 探针覆盖范围内**。
+- **面板里的模型调用仍是同步的**（12 秒上限 + 降级），不是后台线程；极端慢端点下界面最多等 12 秒。
+- 写操作的两阶段要求外部 AI 客户端配合回传 `confirm_token`；只发一次 `tools/call` 且不带 token 的客户端只能拿到预览。
+- 本机全量 pytest 约 5–6 分钟，主要耗在临时目录的安全删除插件，不是功能问题。
+
+### 验证
+
+| 项 | 结果 |
+|---|---|
+| `python -m pytest -q` | **1197 passed**（新增 42 条场景动作 / MCP / 自然语言 / 桥动作回归；另修 4 条依赖真实 `~/.tak` 的旧测试） |
+| `validation/maya_scene_actions_probe.py`（Maya 2026 standalone） | `ok=true`，63 步无失败，18 个动作全覆盖；MCP 读到真实场景数据、写开关拦截、打开后 MCP 真创建了节点；撤销后节点恢复 |
+| `validation/py_compat_smoke.py` | PASS(8) |
+| `tak.ui.generate_theme --check` / `fixtures/generate_fixtures.py --check` | 一致 / 40 个一致 |
+| 本机安装块 | Maya 2026、MotionBuilder 2023 刷到 0.7.0，重跑幂等 |
+
 ## [0.6.1] - 2026-11-14
 
 一句话：**「很多工具打开还是体检界面」和「切分类卡几秒、弹窗自己消失」是同一个

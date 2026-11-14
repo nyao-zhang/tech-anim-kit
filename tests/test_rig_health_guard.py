@@ -414,7 +414,10 @@ def test_ai_layer_is_empty_when_no_blocking_findings():
     assert result.report.metadata["ai"]["degraded"]
 
 
-def test_ai_layer_uses_local_template_offline():
+def test_ai_layer_uses_local_template_offline(tmp_path, monkeypatch):
+    # 有真实 AI key 的机器上 get_provider() 会返回在线 provider；
+    # 本测试要验证的是离线模板路径，必须隔离用户配置。
+    monkeypatch.setenv("TAK_HOME", str(tmp_path))
     snapshot = _snapshot({})
     snapshot["skin"]["max_influences_found"] = 10
     result = _run(snapshot)
@@ -439,7 +442,8 @@ def test_ai_layer_degrades_when_provider_raises(monkeypatch, core_module):
     assert result.passed is False
 
 
-def test_ai_layer_covers_blocker_findings(core_module):
+def test_ai_layer_covers_blocker_findings(core_module, tmp_path, monkeypatch):
+    monkeypatch.setenv("TAK_HOME", str(tmp_path))
     finding = Finding(rule_id=_RULE + "negative_scale", severity=Severity.BLOCKER,
                       message="blocker 测试", node="arm_L",
                       fix_hint="归正缩放", data={"fix": {"op": "reset_scale"}})

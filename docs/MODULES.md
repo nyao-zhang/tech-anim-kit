@@ -47,7 +47,7 @@
 | 管线 / 绑定 | 导出 / 导入 | 选内容、选目标、导到文件或缓存位，另一侧导入校验 | [asset_pipeline](modules/asset_pipeline.md) |
 | AI / 绑定 | ML Deformer | 采样计划、数据集、五项质量门槛 | [mldeformer_factory](modules/mldeformer_factory.md) |
 | AI / 动画 | VLM 缺陷检查 | 抽帧交给视觉模型找变形缺陷，只给候选 | [defect_inspector](modules/defect_inspector.md) |
-| AI / 通用 | 对话控制台 | 一句话问场景，得到判定与可审核的修复计划 | [agent_console](modules/agent_console.md) |
+| AI / 通用 | 对话控制台 | 一句话查当前场景 / 骨架 / 蒙皮，或创建、改名、删除节点；同一套动作经 MCP 暴露给外部 AI | [agent_console](modules/agent_console.md) |
 
 （分类列写的是默认归类，在设置面板里可以改。「全部」是视图不是分类。）
 
@@ -129,8 +129,10 @@ Web 面板**不是**第二个工具入口。它的实际场景只有两个：
 | `GET /bridge/health` | 探活，只回版本号，**不带任何场景数据** | 否 |
 | `GET /bridge/tools` | 可见工具列表 | 是 |
 | `GET /bridge/scene[?full=1]` | 场景摘要（默认只给 40 个关节名，`full=1` 才全量） | 是 |
+| `GET /bridge/actions` | 18 个场景动作的能力表 + MCP tool 描述 + 写开关状态（v0.7.0） | 是 |
 | `POST /bridge/run` | `{tool_id, options?}` 跑一个工具，回 finding 摘要 | 是 |
 | `POST /bridge/chat` | `{message}` 只读对话 | 是 |
+| `POST /bridge/act` | `{action, params?, confirm?, dry_run?, confirm_token?}` 执行受限场景动作（v0.7.0） | 是 |
 
 ```bash
 TOKEN=$(python -c "from tak.core import config;print(config.load()['bridge']['token'])")
@@ -140,8 +142,11 @@ python -m tak.core.bridge status          # 桥没开时也能看到提示
 
 三条边界：
 
-1. **写场景不开放**。`/bridge/chat` 只读，`/bridge/run` 只跑工具插件（插件的
-   `run_report` 阶段不写场景）。要改场景，只能在 DCC 面板里走 confirm 流程。
+1. **写场景受四重闸**（v0.7.0）。`/bridge/chat` 与 `/bridge/run` 仍然只读；
+   写入只能走 `/bridge/act`，且要同时满足：动作在 18 个白名单内、参数过 schema、
+   先 dry-run 拿 `confirm_token` 再带同一 token 二次调用、以及
+   `bridge.allow_write=true`（默认 **false**，需在面板勾选）。每一次写入都包在
+   undo chunk 里，可撤销。详见 [MCP 文档](mcp.md)。
 2. **宿主调用回主线程**。HTTP 在自己线程里跑，`cmds` 只能在主线程调，所以桥
    通过适配器注册的 `executeInMainThreadWithResult` 切回去；主线程被占住时
    硬超时 15s 回 503，不会把请求挂死。
@@ -179,6 +184,22 @@ python -m tak.core.bridge status          # 桥没开时也能看到提示
 对话控制台底部那一行：「桥接：未启动（外部调不进来）　[启动桥接]　[详情]　[AI 连接]」。
 点一下就是起，再点是停，地址会直接显示在标签上；「详情」里才给 token、发现文件
 路径和 curl 示例。默认**不自启**——一个监听端口不该自己起来。
+
+## 8.4 让 AI 直接操作场景（MCP，v0.7.0）
+
+v0.6 的「对话式控制台」只是规则问答 + 候选计划预览器，既查不到当前节点也建不了资产，仓里没有 MCP 代码。v0.7.0 把这条链路补全：
+
+| 层 | 文件 | 职责 |
+|---|---|---|
+| 能力表 | `tak/core/scene_actions.py` | 18 个受限动作、参数 schema、两阶段确认、审计（零 DCC import） |
+| 自然语言 | `tak/core/ai/commands.py` | 有 key 走 function calling，没 key 走本地关键词解析 |
+| 宿主实现 | `tak/adapters/maya/scene_ops.py` | 真实 `maya.cmds`：查询 / 绑定逻辑 / 创建 / 改名 / 删除 / 撤销 |
+| 桥 | `tak/core/bridge.py` | `/bridge/actions`、`/bridge/act`、写开关、主线程切换 |
+| 外部接入 | `tak/mcp/server.py` | stdio JSON-RPC 2.0，21 个 MCP tools，普通 Python 即可跑 |
+
+面板里新增一行：`允许写入（面板 + MCP）` 勾选框，以及 `[执行]` / `[撤销上一次]` / `[MCP 配置]` 三个按钮。写操作永远先出 dry-run 预览，人点「执行」才落地，token 绑定动作与参数、5 分钟过期。
+
+配置与完整工具表见 **[MCP 文档](mcp.md)**。Maya 2026 standalone 真机探针 `validation/maya_scene_actions_probe.py` 覆盖 18 个动作、撤销、桥与 MCP 真实创建节点，结果 `ok=true`。
 
 ## 9. 文档的维护约定
 

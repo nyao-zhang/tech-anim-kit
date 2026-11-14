@@ -65,7 +65,10 @@ def default_config() -> Dict[str, Any]:
         "tool_order": {},
         "check_state": {},
         "export_profiles": {},
-        "bridge": {"port": 0, "token": "", "autostart": False},
+        # allow_write 默认 False：桥开着也只允许外部查询 / 预览，不能改场景。
+        # 要允许 MCP 写入必须在 DCC 面板里手动打开（见 bridge.set_allow_write）。
+        "bridge": {"port": 0, "token": "", "autostart": False,
+                   "allow_write": False},
         "theme": "dark",
         # AI 连接：base_url 指向任何 OpenAI 兼容端点（WorkBuddy 网关、
         # 自建代理、官方 API 都行）。**密钥不写配置文件**，只记环境变量名，
@@ -163,6 +166,9 @@ def _normalize(raw: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
             warnings.append("bridge.port 不是整数，已回退 0")
         data["bridge"]["token"] = str(bridge.get("token") or "")
         data["bridge"]["autostart"] = bool(bridge.get("autostart", False))
+        # 归一化时漏掉这个键会让 set_allow_write(True) 写进去又被下次 load
+        # 悄悄丢掉 —— 表现为「明明打开了开关，外部写入仍被拒」。
+        data["bridge"]["allow_write"] = bool(bridge.get("allow_write", False))
 
     theme = str(raw.get("theme") or "dark").lower()
     data["theme"] = theme if theme in ("dark", "light") else "dark"

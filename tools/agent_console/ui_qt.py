@@ -70,8 +70,9 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     title_font.setPointSize(title_font.pointSize() + 4)
     title.setFont(title_font)
     subtitle = QtWidgets.QLabel(
-        "意图/判定走规则 · AI 只解释与候选 · chat 绝不写场景 · "
-        "写入需白名单 + dry-run + 权限 + 人工确认 + undo")
+        "直接说需求：查场景 / 列节点 / 看骨架与蒙皮 / 创建资产 / 改名删除。"
+        "动作走白名单 + 参数校验，写入必须先预览再由你点「执行」；同一套动作经 MCP "
+        "暴露给外部 AI（桥接开关在下面）。")
     subtitle.setProperty("takMuted", "true")
     subtitle.setWordWrap(True)
 
@@ -79,7 +80,8 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     input_row = QtWidgets.QHBoxLayout()
     input_row.setSpacing(8)
     line_edit = QtWidgets.QLineEdit()
-    line_edit.setPlaceholderText("例如：解释一下问题 / 生成修复计划 / 查看状态")
+    line_edit.setPlaceholderText(
+        "例如：场景里有多少关节 / 列出所有控制器 / 查 body 的蒙皮 / 创建一个 locator 叫 foot_ctrl")
     send_button = QtWidgets.QPushButton("发送")
     send_button.setProperty("takPrimary", "true")
     send_button.setMinimumHeight(34)
@@ -104,8 +106,28 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     connect_row.addWidget(bridge_detail, 0)
     connect_row.addWidget(ai_button, 0)
 
+    # 动作区：写操作永远先出预览，人点「执行」才落地；开关默认关。
+    action_row = QtWidgets.QHBoxLayout()
+    action_row.setSpacing(8)
+    write_box = QtWidgets.QCheckBox("允许写入（面板 + MCP）")
+    write_box.setToolTip("关闭时外部 AI 与面板都只能查询 / 预览，不能改场景。"
+                         "打开后写操作仍需带 confirm_token 二次提交。")
+    execute_button = QtWidgets.QPushButton("执行")
+    execute_button.setProperty("takPrimary", "true")
+    execute_button.setToolTip("执行上一次预览的写操作（需先打开「允许写入」）")
+    execute_button.setEnabled(False)
+    undo_button = QtWidgets.QPushButton("撤销上一次")
+    undo_button.setToolTip("撤销最近一次由 TAK 执行的写操作")
+    mcp_button = QtWidgets.QPushButton("MCP 配置")
+    mcp_button.setToolTip("显示可直接粘进 WorkBuddy / Claude Desktop 的 mcpServers 配置")
+    action_row.addWidget(write_box, 1)
+    action_row.addWidget(execute_button, 0)
+    action_row.addWidget(undo_button, 0)
+    action_row.addWidget(mcp_button, 0)
+
     # 候选 / 报告视图 + 对话日志
     result_table = ResultTable(central)
+    result_table.set_title("动作结果")
     log_console = LogConsole(central)
     log_console.setMinimumHeight(180)
 
@@ -113,6 +135,7 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     layout.addWidget(subtitle)
     layout.addLayout(input_row)
     layout.addLayout(connect_row)
+    layout.addLayout(action_row)
     layout.addWidget(result_table, 2)
     layout.addWidget(log_console, 1)
     window.setCentralWidget(central)
@@ -122,7 +145,32 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     status.set_status("就绪")
 
     core = _plugin_core()
-    state = {"snapshot": {}, "last": None, "bridge_error": ""}
+    state: dict = {"snapshot": {}, "last": None, "bridge_error": "",
+                   "pending_calls": [], "write_enabled": False}
+
+    def _format(item: dict) -> str:
+        try:
+            from tak.core.ai.commands import format_result
+            return format_result(item)
+        except Exception as exc:
+            return "%s: %s" % (item.get("action"), item.get("error") or exc)
+
+    def _show_results(reply: dict) -> None:
+        rows = []
+        for item in (reply.get("results") or []):
+            level = (Severity.WARNING if item.get("status") == "dry_run"
+                     else Severity.ERROR if not item.get("ok")
+                     else Severity.INFO)
+            rows.append(Finding(
+                rule_id="agent_console.action.%s" % item.get("action", "?"),
+                severity=level,
+                message=_format(item),
+                node=str((item.get("params") or {}).get("node")
+                         or (item.get("params") or {}).get("name") or ""),
+                fix_hint=("点「执行」并打开「允许写入」才会改场景"
+                          if item.get("status") == "dry_run" else ""),
+            ))
+        result_table.set_findings(rows)
 
     def _on_send() -> None:
         text = line_edit.text().strip()
@@ -130,32 +178,133 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
             return
         line_edit.clear()
         log_console.append("你：%s" % text, "info")
+        status.set_status("正在解析指令…")
         try:
-            reply = core.chat(text, snapshot=state.get("snapshot") or {})
-        except Exception as exc:
-            status.set_status("对话失败")
-            log_console.error("对话失败: %s: %s" % (type(exc).__name__, exc))
+            reply = core.command(text, dcc=dcc,
+                                 allow_write=bool(state["write_enabled"]))
+        except Exception as exc:  # 槽里的异常 Qt 会吞掉，必须自己报出来
+            log_console.error("指令解析失败: %s: %s" % (type(exc).__name__, exc))
+            status.set_status("指令解析失败")
             return
         state["last"] = reply
-        log_console.append("助手：%s" % reply.get("reply", ""), "info")
-        status.set_status("状态：%s · 候选 %d 项" % (
-            reply.get("status", ""), len(reply.get("candidates") or [])))
-        rows = []
-        for row in (reply.get("preview") or []):
-            rows.append(Finding(
-                rule_id=str(row.get("tool") or "agent_console.candidate"),
-                severity=Severity.INFO,
-                message="dry-run：%s %s" % (
-                    row.get("tool"),
-                    json.dumps(row.get("params") or {}, ensure_ascii=False,
-                               sort_keys=True)),
-                node=str((row.get("params") or {}).get("node", "")),
-                fix_hint="需 confirm(...) 二次确认并授权后才会写场景。",
-            ))
-        result_table.set_findings(rows)
+        if reply.get("model_error"):
+            log_console.append("AI 端点不可用，已用本地解析：%s"
+                               % str(reply["model_error"])[:140], "warning")
+        if reply.get("reply"):
+            log_console.append("助手：%s" % str(reply["reply"])[:600], "info")
+        results = reply.get("results") or []
+        if not results:
+            # 没解析出动作时退回原来的规则问答，输入框不至于像坏了。
+            try:
+                old = core.chat(text, snapshot=state.get("snapshot") or {})
+                log_console.append("规则问答：%s" % str(old.get("reply") or "")[:600],
+                                   "info")
+            except Exception as exc:
+                log_console.error("规则问答也失败: %s: %s" % (type(exc).__name__, exc))
+            if reply.get("hint"):
+                log_console.append("提示：%s" % str(reply["hint"])[:240], "warning")
+            result_table.set_findings([])
+            state["pending_calls"] = []
+            execute_button.setEnabled(False)
+            status.set_status("未解析出场景动作")
+            return
+        for item in results:
+            level = ("error" if not item.get("ok") else
+                     "warning" if item.get("status") == "dry_run" else "info")
+            log_console.append(_format(item), level)
+        _show_results(reply)
+        state["pending_calls"] = list(reply.get("calls") or [])
+        needs = bool(reply.get("need_confirm"))
+        execute_button.setEnabled(needs)
+        if needs and not state["write_enabled"]:
+            log_console.append("要执行这条写操作，请先勾选「允许写入（面板 + MCP）」",
+                               "warning")
+        status.set_status("%d 项动作 · %s" % (
+            len(results), "待确认" if needs else "已完成"))
+
+    def _on_execute() -> None:
+        try:
+            if not state["pending_calls"]:
+                log_console.append("没有待确认的动作，先在上面提一句需求", "warning")
+                return
+            if not state["write_enabled"]:
+                log_console.error("写入开关未打开：先勾选「允许写入（面板 + MCP）」")
+                return
+            reply = core.command(calls=state["pending_calls"], dcc=dcc,
+                                 allow_write=True, execute=True)
+            for item in (reply.get("results") or []):
+                log_console.append(_format(item),
+                                   "info" if item.get("ok") else "error")
+            _show_results(reply)
+            committed = any(item.get("committed") for item in
+                            (reply.get("results") or []))
+            if committed:
+                state["pending_calls"] = []
+                execute_button.setEnabled(False)
+                status.set_status("已执行 · 可用「撤销上一次」回退")
+            else:
+                status.set_status("未执行（检查写入开关或错误原因）")
+        except Exception as exc:
+            log_console.error("执行失败: %s: %s" % (type(exc).__name__, exc))
+            status.set_status("执行失败")
+
+    def _on_undo() -> None:
+        try:
+            payload = core.undo(dcc=dcc)
+            if payload.get("ok"):
+                log_console.append("已撤销：%s" % payload.get("undone"), "info")
+                status.set_status("已撤销上一次写入")
+            else:
+                log_console.append("撤销未生效：%s" % payload.get("error"), "warning")
+        except Exception as exc:
+            log_console.error("撤销失败: %s: %s" % (type(exc).__name__, exc))
+
+    def _on_mcp_config() -> None:
+        try:
+            snippet = json.dumps(core.mcp_config(), ensure_ascii=False, indent=2)
+            log_console.append("把下面这段加进 WorkBuddy / Claude Desktop 的 "
+                               "mcpServers 配置（普通 Python 即可，无需 Maya 解释器）：",
+                               "info")
+            log_console.append(snippet, "info")
+            try:
+                app = QtWidgets.QApplication.instance()
+                if app is not None and app.clipboard() is not None:
+                    app.clipboard().setText(snippet)
+                    log_console.append("已复制到剪贴板", "info")
+            except Exception:
+                pass
+            status.set_status("MCP 配置已输出到日志台")
+        except Exception as exc:
+            log_console.error("MCP 配置读取失败: %s: %s" % (type(exc).__name__, exc))
+
+    def _on_write_toggled(checked: bool) -> None:
+        try:
+            payload = core.set_write_enabled(bool(checked))
+            state["write_enabled"] = bool(payload.get("allow_write"))
+            log_console.append(
+                "外部/面板写入：%s（%s）" % (
+                    "已开启" if state["write_enabled"] else "已关闭",
+                    "写操作仍需每次预览并点执行" if state["write_enabled"]
+                    else "只能查询与预览"),
+                "warning" if state["write_enabled"] else "info")
+        except Exception as exc:
+            log_console.error("写入开关设置失败: %s: %s" % (type(exc).__name__, exc))
+            write_box.blockSignals(True)
+            write_box.setChecked(False)
+            write_box.blockSignals(False)
+
+    try:
+        state["write_enabled"] = bool(core.write_enabled())
+        write_box.setChecked(state["write_enabled"])
+    except Exception:
+        pass
 
     send_button.clicked.connect(_on_send)
     line_edit.returnPressed.connect(_on_send)
+    execute_button.clicked.connect(_on_execute)
+    undo_button.clicked.connect(_on_undo)
+    mcp_button.clicked.connect(_on_mcp_config)
+    write_box.toggled.connect(_on_write_toggled)
 
     # ------------------------------------------------------------ 连接区逻辑
     def _refresh_bridge_label() -> None:
@@ -257,6 +406,14 @@ def _build_window(QtWidgets: Any, ResultTable: Any, LogConsole: Any,
     window._agent_bridge_label = bridge_label
     window._agent_bridge_toggle = bridge_toggle
     window._agent_bridge_error = lambda: state["bridge_error"]
+    # v0.7.0 动作链路的测试钩子（GUI 探针 / mayapy offscreen 可无鼠标断言）
+    window._agent_execute = _on_execute
+    window._agent_undo = _on_undo
+    window._agent_mcp_config = _on_mcp_config
+    window._agent_write_box = write_box
+    window._agent_execute_button = execute_button
+    window._agent_result_table = result_table
+    window._agent_state = state
     window.show()
     return window
 

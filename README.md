@@ -2,7 +2,9 @@
 
 跨 DCC 技术动画工具集，面向 **Maya 2023+ / 3ds Max 2023+ / MotionBuilder 2023+ / Unreal Engine 5.8–5.9**。
 
-> 当前版本 `0.6.1`（**面板可用性修复**：工具界面不再变成体检报告，切分类不再闪窗卡顿）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
+> 当前版本 `0.7.0`（**对话式工具台真的能干活**：一句话查/改 Maya 场景，经 MCP 暴露给外部 AI）。核心层零 DCC 依赖，四端适配器、Qt 面板与安装器均已落地，Maya 2023/2024/2026 与 UE 5.8.4 真机验证。
+>
+> v0.7.0 补上此前缺失的整条链路：18 个受限场景动作（查场景 / 查绑定逻辑 / 创建资产 / 改名删除 / 设属性）、Maya 真实宿主实现、自然语言 → function calling（无 key 时本地关键词解析）、dry-run + 一次性 token + 人工确认 + undo，以及一个零依赖 stdio **MCP server**。面板、HTTP 桥、MCP 共用同一张动作白名单。详见 [docs/mcp.md](docs/mcp.md)。
 >
 > v0.6.1 修两个真机问题：三个工具（场景检查 / 导出导入 / 抽帧缺陷检查）的界面因为导入了未导出的 `_theme_path` 而 `ImportError`，被 `show()` 吞掉后静默回退成一张体检报告；详情区清空布局时用 `setParent(None)`，每切一次分类把几十个 QLabel 提升成临时顶层窗口（闪一下又消失，还拖慢几秒）。现在五个工具都打开自己的窗口，切分类不再新增窗口。
 >
@@ -103,7 +105,7 @@ python validation/run_probe.py --script ue_adapter_probe.py
 | 导出 / 导入 `asset_pipeline` | 管线 / 绑定 | 选内容（完整绑定 / 仅骨骼 / 仅蒙皮 / 动画缓存 / 仅控制器）与目标（Maya / Max / MoBu / UE / 通用），导到文件或跨 DCC 缓存位，另一侧用同一 profile 做导入校验 | [asset_pipeline](docs/modules/asset_pipeline.md) |
 | ML Deformer `mldeformer_factory` | AI / 绑定 | 姿态采样计划 + 内容寻址数据集 + 五项质量门槛；训练交给 UE 的 ML Deformer 训练器 | [mldeformer_factory](docs/modules/mldeformer_factory.md) |
 | VLM 缺陷检查 `defect_inspector` | AI / 动画 | 抽帧图片序列 → 视觉模型给候选 → 确定性过滤 → 帧号 / 类别 / 骨骼 / 置信度清单 | [defect_inspector](docs/modules/defect_inspector.md) |
-| 对话控制台 `agent_console` | AI / 通用 | 一句话问场景，判定走规则引擎；修复计划过白名单 → dry-run → 权限 → 二次确认 → undo | [agent_console](docs/modules/agent_console.md) |
+| 对话控制台 `agent_console` | AI / 通用 | 一句话查当前场景 / 骨架 / 蒙皮，或创建、改名、删除节点；18 个受限动作 + dry-run 预览 + 人工确认 + undo；同一套动作经 MCP 暴露给外部 AI | [agent_console](docs/modules/agent_console.md) |
 
 另有两个内置界面：**设置**（分类增删改、工具归类、第三方插件导入、配置目录）与**关于**。两者都在菜单里，也在面板左下角。
 
@@ -144,11 +146,14 @@ Maya 下共 **37 个检查项**（19 条内置规范 + 18 条来自规则提供�
 | `tak/install/` | 一条命令安装器：四端探测、标记块幂等写入、备份、精确卸载、CLI |
 | `tak/compat/` | PySide2→PySide6 兼容层、UE API 降级探测 |
 | `tak/ui/` | 设计 token、`theme.qss`/`theme_light.qss`/`theme.css`、`qt/`（主面板 / 详情面板 / 设置面板）、`web/` 只读报告看板 |
+| `tak/core/scene_actions.py` | 18 个受限场景动作的白名单、参数校验、两阶段确认与审计（零 DCC import） |
+| `tak/mcp/` | stdio JSON-RPC 2.0 MCP server，把场景动作暴露给外部 AI |
+| `tak/adapters/maya/scene_ops.py` | Maya 真实宿主实现：查询 / 绑定逻辑 / 创建 / 修改 / 撤销 |
 | `tools/` | 10 个插件（5 个工具 + 5 个内部规则提供者）+ `_template/` + `new_tool.py` |
 | `knowledge/` | 5 篇绑定知识库种子文档（命名、权重、FBX/UE 流水线、IK 重定向、DCC 差异） |
 | `fixtures/` | 20 好 + 20 坏骨架快照，判定器回归基线 |
-| `tests/` | 39 个测试模块 / 1214 个用例 |
-| `validation/` | UE headless 探测、mayapy 全量回归、跨版本冒烟、**四端一致性回归**与实测证据 JSON |
+| `tests/` | 43 个测试模块 / 1197 个用例 |
+| `validation/` | UE headless 探测、mayapy 全量回归、跨版本冒烟、**四端一致性回归**、Maya 场景动作真机探针与实测证据 JSON |
 | `CHANGELOG.md` | 变更日志（含每版的已知限制） |
 | `legacy/sources/` | 本机自研代码的只读整理副本（原文件未改动） |
 | `docs/` | 版本兼容、验证清单、插件指南、旧代码映射、批次交付报告、发布手册 |
@@ -193,6 +198,30 @@ TAK_AI_BASE_URL=https://api.deepseek.com    # 任何 OpenAI 兼容端点
 `provider_for_task("explain" | "complex" | "vision")` 分别返回 DeepSeek-V4.1-Flash / Kimi-K3.1-Pro / MiniMax-M3.1-Flash；缺密钥自动降级为确定性离线实现。**边界**：确定性判定一律走 `tak.core.rules`；AI 只解释、生成候选、打标、诊断，不参与判定。会话级模型切换由使用者在界面完成，本模块不切换当前会话模型。
 
 批次 3 的四个 AI 内核（`agent` / `mapping` / `vision` / `knowledge`）**全部可离线跑**：`MockProvider` / `OfflineProvider` 提供确定性叙事与候选，`rig_kb` 的 BM25 检索本身零模型依赖。因此 CI 不设密钥也能跑满 872 个用例。
+
+## 让 AI 直接操作场景（MCP）
+
+面板里的输入框现在能把一句话变成**真实 DCC 动作**，外部 AI 客户端也能通过 MCP 调同一套动作：
+
+```text
+你 / 外部 AI：「场景里有多少关节」「查 body 的蒙皮」「创建一个 locator 叫 foot_ctrl」
+        ↓  受限动作白名单（18 个，参数强校验）
+    查询类 → 直接返回真实场景数据
+    写入类 → dry-run 预览 + 一次性 confirm_token → 你点「执行」→ undo chunk → maya.cmds
+```
+
+三步接上：Maya 面板点 **「启动桥接」** → 点 **「MCP 配置」** 把 `mcpServers` 片段粘进 WorkBuddy / Claude Desktop → 要写入时勾选 **「允许写入（面板 + MCP）」**。MCP server 用普通 Python 跑（`python -m tak.mcp`），零第三方依赖、不 import Maya。
+
+```bash
+python -m tak.mcp --print-config     # 生成配置片段
+python -m tak.mcp --status           # 看桥有没有开
+python -m tak.core.bridge actions    # 列出 18 个动作
+python -m tak.core.bridge act scene.summary '{}'
+```
+
+不配 AI 端点也能用：本地关键词解析覆盖高频句式；配了端点走 OpenAI 兼容 function calling，任意说法都能理解（12 秒超时自动降级）。完整工具表、两阶段写入示例、安全边界与排错见 **[docs/mcp.md](docs/mcp.md)**。
+
+真机验证：`validation/maya_scene_actions_probe.py` 在 Maya 2026 standalone 跑过 18 个动作、撤销、桥与 MCP 真实创建节点，`ok=true`（63 步）。
 
 ## AI 工作台
 

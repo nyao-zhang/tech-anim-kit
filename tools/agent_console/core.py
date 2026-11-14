@@ -9,8 +9,16 @@
 * ``create_session`` / ``chat`` / ``confirm``：给 Web API（``/api/agent``）的薄封装，
   三者都返回可 JSON 序列化的纯数据；chat 绝不执行，confirm 是唯一写入口。
 
-安全边界：判定走 ``tak.core.rules``，AI 只解释和生成参数化 JSON 候选；任何写入
-都要经 ``ACTION_REGISTRY.build_plan`` 白名单 + dry-run + 权限 + 人工确认 + undo。
+两条链路并存（v0.7.0）：
+
+* **旧规则问答**：``create_session`` / ``chat`` / ``confirm`` / ``run_report``。
+  判定走 ``tak.core.rules``，AI 只解释和生成参数化 JSON 候选；写入要经
+  ``ACTION_REGISTRY.build_plan`` 白名单 + dry-run + 权限 + 人工确认 + undo。
+  ``chat`` 绝不写场景。
+* **新场景动作**：``command`` / ``actions`` / ``undo`` / ``mcp_config``。自然语言
+  经 ``tak.core.ai.commands`` 变成受限动作，由 ``tak.core.scene_actions.REGISTRY``
+  执行；写操作必须 dry-run 拿 ``confirm_token``、人工二次提交、且打开写开关。
+  同一张动作表也经桥与 MCP 暴露给外部 AI。
 """
 from __future__ import annotations
 
@@ -23,6 +31,8 @@ VERSION = "0.1.0"
 _CAPABILITIES = [
     "intent.classify", "rules.explain", "candidates.local", "dsl.plan",
     "dsl.preview", "dsl.confirm", "knowledge.search", "report.render",
+    # v0.7.0：自然语言 → 真实场景动作（查询 / 创建 / 修改 / 绑定逻辑）
+    "nl.command", "scene.query", "scene.write", "rig.query", "mcp.tools",
 ]
 
 # 进程内会话表：Web API 通过 session_id 复用同一会话。
@@ -39,8 +49,9 @@ def info() -> Dict[str, Any]:
         "version": VERSION,
         "dcc": ["maya", "max", "mobu", "unreal"],
         "capabilities": list(_CAPABILITIES),
-        "description": "对话式控制台：意图与判定走确定性规则，AI 只解释和生成参数化候选；"
-                       "写入需白名单 + dry-run + 权限 + 人工确认 + undo，chat 绝不写场景。",
+        "description": "对话式控制台：用一句话查询当前场景/骨架/蒙皮，或创建、重命名、"
+                       "删除节点；动作走白名单 + 参数校验 + dry-run + 人工确认 + undo。"
+                       "同一套动作经 MCP 暴露给外部 AI。",
         "safety": list(SAFETY_NOTES),
     }
 
@@ -222,3 +233,44 @@ def confirm(plan_id: Any, confirm: bool = False, granted: Any = None,
         }
     return session.confirm(plan_id, confirm=confirm, granted=granted,
                            dry_run=dry_run)
+
+
+# --------------------------------------------------------------------------
+# v0.7.0：自然语言指令 → 真实场景动作（与 MCP 共用同一张动作白名单）
+# --------------------------------------------------------------------------
+def command(message: str = "", **kwargs: Any) -> Dict[str, Any]:
+    """把一句中文需求变成场景动作，返回可 JSON 序列化的结果。
+
+    常用参数：``calls``（带 confirm_token 的批次，UI 点「执行」时回传）、
+    ``dcc``、``allow_write``、``execute``、``use_model``。
+    """
+    from tak.core.ai import commands
+    return commands.command(message, **kwargs)
+
+
+def actions(dcc: str = "maya") -> Dict[str, Any]:
+    """列出当前可用场景动作（面板与 MCP 看到的是同一张表）。"""
+    from tak.core import scene_actions
+    return scene_actions.describe_actions(dcc=dcc)
+
+
+def undo(dcc: str = "maya") -> Dict[str, Any]:
+    """撤销最近一次 TAK 写操作。"""
+    from tak.core import scene_actions
+    return scene_actions.REGISTRY.undo_last(dcc)
+
+
+def mcp_config() -> Dict[str, Any]:
+    """给 WorkBuddy / Claude Desktop 的 mcpServers 配置片段。"""
+    from tak.mcp.server import config_snippet
+    return config_snippet()
+
+
+def write_enabled() -> bool:
+    from tak.core import bridge
+    return bridge.allow_write()
+
+
+def set_write_enabled(enabled: bool) -> Dict[str, Any]:
+    from tak.core import bridge
+    return bridge.set_allow_write(enabled)

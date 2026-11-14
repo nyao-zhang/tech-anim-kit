@@ -14,9 +14,11 @@ socket server 都是这个形状）。
 2. **必须带 token**：首次启动随机生成 32 字节，落盘 ``~/.tak/bridge.json``，
    请求头 ``X-TAK-Token`` 校验；``/bridge/health`` 不需要 token 但**不返回任何
    场景数据**，只回版本号，方便探测「有没有开」；
-3. **只读为主**：``/bridge/run`` 只跑工具插件，而插件契约里 ``run_report`` 阶段
-   本身不写场景；写操作只能走 ``/bridge/chat`` 背后的 confirm 流程，那条路径
-   仍然要白名单 + dry-run + 权限 + 人工确认；
+3. **写入受四重闸**（v0.7.0）：``/bridge/scene`` / ``/bridge/tools`` /
+   ``/bridge/run`` / ``/bridge/chat`` 全部只读；写场景只能走 ``/bridge/act``，
+   且要动作在白名单内、参数过 schema、先 dry-run 拿 ``confirm_token`` 再带同一
+   token 二次调用、以及 ``bridge.allow_write=true``（默认 false，需在 DCC 面板
+   手动打开）。每次写入包在 undo chunk 里，可撤销；
 4. **审计**：每次调用都记 ``method path status 耗时 client``，日志进
    ``~/.tak/bridge.log``（滚动到 512 KB 后清空重写）。
 
@@ -85,6 +87,30 @@ def ensure_token(data: Optional[Dict[str, Any]] = None) -> str:
     cfg["bridge"] = bridge
     tak_config.save(cfg)
     return token
+
+
+def allow_write(data: Optional[Dict[str, Any]] = None) -> bool:
+    """是否允许「外部（MCP / HTTP）」真的写场景。
+
+    默认 **False**：桥开着也只让外部查询与预览，不能改场景。写操作必须先在
+    DCC 面板里手动打开这个开关（或 ``set_allow_write(True)``）。这是刻意的
+    第二道闸 —— 即使外部 AI 拿到了 token，也不能绕过人改你的文件。
+    """
+    cfg = data if isinstance(data, dict) else tak_config.load()
+    bridge = cfg.get("bridge") if isinstance(cfg.get("bridge"), dict) else {}
+    return bool(bridge.get("allow_write"))
+
+
+def set_allow_write(enabled: bool) -> Dict[str, Any]:
+    """持久化写开关；其它配置键原样保留（原子写由 config.save 保证）。"""
+    cfg = tak_config.load()
+    bridge = dict(cfg.get("bridge") or {}) if isinstance(cfg, dict) else {}
+    bridge["allow_write"] = bool(enabled)
+    cfg = dict(cfg)
+    cfg["bridge"] = bridge
+    tak_config.save(cfg)
+    return {"ok": True, "allow_write": bool(enabled),
+            "config": tak_config.config_home()}
 
 
 def load_discovery() -> Dict[str, Any]:
@@ -234,6 +260,7 @@ class BridgeServer:
             "call_timeout": self.call_timeout,
             "thread_safe": self._executor is not None,
             "thread_note": self._thread_note,
+            "allow_write": allow_write(),
             "discovery": discovery_path(),
             "last_error": self.last_error,
         }
@@ -380,7 +407,7 @@ class BridgeServer:
         return self._host_call(_capture) or None
 
     def chat(self, message: str, session_id: str = "bridge") -> Dict[str, Any]:
-        """对话（只读）。写场景仍然只能在 DCC 里人工确认，桥不开放 confirm。"""
+        """只读的规则问答对话；写场景请走 ``/bridge/act``（两阶段确认 + 写开关）。"""
         message = str(message or "").strip()
         if not message:
             return {"ok": False, "error": "缺少 message"}
@@ -390,15 +417,76 @@ class BridgeServer:
         turn = session.chat(message, snapshot=snapshot)
         return {"ok": True, "session_id": session_id,
                 "turn": turn if isinstance(turn, dict) else str(turn),
-                "note": "桥只提供只读对话；写场景请在 DCC 面板内确认执行。"}
+                "note": "本端点只读；写场景请用 POST /bridge/act（先 dry-run 拿 "
+                        "confirm_token，打开写开关后再带 token 提交）。"}
+
+    def actions(self) -> Dict[str, Any]:
+        """列出可用场景动作（能力表 + MCP tool 描述 + 写开关状态）。"""
+        from tak.core import scene_actions as sa
+        payload = sa.describe_actions(dcc=self.dcc)
+        payload["allow_write"] = allow_write()
+        payload["mcp_tools"] = sa.REGISTRY.mcp_tools(dcc=self.dcc)
+        return payload
+
+    def act(self, action: str, params: Optional[Dict[str, Any]] = None,
+            confirm: bool = False, dry_run: bool = True,
+            confirm_token: str = "") -> Dict[str, Any]:
+        """执行一个受限场景动作；宿主调用一律切回主线程。
+
+        两阶段确认 + 写开关是这里的核心：外部 AI 即使拿到 token，也只能先
+        拿到 dry-run 预览；要真写，必须 (1) 带 ``confirm_token`` 且
+        ``confirm=true, dry_run=false``，(2) DCC 面板里打开了「允许 MCP 写入」。
+        """
+        from tak.core import scene_actions as sa
+        name = str(action or "").strip()
+        spec = sa.REGISTRY.get(name)
+        if spec is None:
+            return {"ok": False, "error": "未知动作：%s（用 GET /bridge/actions 查看清单）"
+                                          % name}
+        wants_commit = bool(confirm and not dry_run and not spec.read_only)
+        enabled = allow_write()
+        if wants_commit and not enabled:
+            return {
+                "ok": False,
+                "error": "外部写入未启用：请在 DCC 面板勾选「允许 MCP 写入」，"
+                         "或执行 tak.core.bridge.set_allow_write(True)。"
+                         "去掉 confirm 可先拿 dry-run 预览。",
+                "allow_write": False,
+                "action": name,
+            }
+        granted = [sa.WRITE_PERMISSION] if wants_commit else []
+
+        def _run() -> Dict[str, Any]:
+            return sa.REGISTRY.execute(
+                name, params or {}, confirm=bool(confirm), dry_run=bool(dry_run),
+                confirm_token=str(confirm_token or ""), granted=granted,
+                dcc=self.dcc)
+
+        try:
+            payload = self._host_call(_run)
+        except BridgeBusy:
+            raise
+        except Exception as exc:
+            payload = {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+        if not isinstance(payload, dict):
+            payload = {"ok": False, "error": "动作返回了非字典结果"}
+        payload.setdefault("ok", True)
+        payload["allow_write"] = enabled
+        payload["dcc"] = self.dcc
+        _log("ACT %s dry_run=%s confirm=%s committed=%s ok=%s"
+             % (name, bool(dry_run), bool(confirm),
+                bool(payload.get("committed")), bool(payload.get("ok"))))
+        return payload
 
 
 ENDPOINTS: Tuple[str, ...] = (
     "GET  /bridge/health",
     "GET  /bridge/tools",
     "GET  /bridge/scene[?full=1]",
+    "GET  /bridge/actions",
     "POST /bridge/run     {tool_id, options?}",
     "POST /bridge/chat    {message, session_id?}",
+    "POST /bridge/act     {action, params?, confirm?, dry_run?, confirm_token?}",
 )
 
 
@@ -494,6 +582,14 @@ class _BridgeHandler(BaseHTTPRequestHandler):
                query: str) -> Dict[str, Any]:
         if route == "/bridge/tools" and method == "GET":
             return server.tools()
+        if route == "/bridge/actions" and method == "GET":
+            return server.actions()
+        if route == "/bridge/act" and method == "POST":
+            body = self._body()
+            return server.act(body.get("action"), body.get("params"),
+                              bool(body.get("confirm", False)),
+                              bool(body.get("dry_run", True)),
+                              str(body.get("confirm_token") or ""))
         if route == "/bridge/scene" and method == "GET":
             full = "full=1" in query or "full=true" in query
             return server.scene(full=full)
@@ -602,7 +698,11 @@ def call(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None,
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
             payload.setdefault("ok", True)
-            payload["status"] = response.status
+            # /bridge/act 用 status 表示 dry_run / committed / error。旧的
+            # 「status = HTTP 码」会把它覆盖掉，客户端就分不清预览和执行了。
+            payload["http_status"] = response.status
+            if "status" not in payload:
+                payload["status"] = response.status
             return payload
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", "replace")
@@ -631,8 +731,30 @@ def main(argv: Optional[List[str]] = None) -> int:
         payload = call("/bridge/run", "POST", {"tool_id": args[1]})
     elif action == "chat" and len(args) > 1:
         payload = call("/bridge/chat", "POST", {"message": " ".join(args[1:])})
+    elif action == "actions":
+        payload = call("/bridge/actions")
+    elif action == "act" and len(args) > 1:
+        params: Dict[str, Any] = {}
+        payload = {"ok": True}
+        try:
+            params = json.loads(args[2]) if len(args) > 2 else {}
+            if not isinstance(params, dict):
+                raise ValueError("params 必须是 JSON 对象")
+        except (TypeError, ValueError) as exc:
+            payload = {"ok": False, "error": "params 不是合法 JSON: %s" % exc}
+        if payload.get("ok"):
+            payload = call("/bridge/act", "POST",
+                           {"action": args[1], "params": params,
+                            "dry_run": "--commit" not in args,
+                            "confirm": "--commit" in args,
+                            "confirm_token": next((a.split("=", 1)[1] for a in args
+                                                   if a.startswith("token=")), "")})
+    elif action == "write" and len(args) > 1:
+        payload = set_allow_write(args[1].lower() in ("on", "true", "1", "yes"))
     else:
-        payload = {"ok": False, "error": "用法: status|scene|tools|run <tool_id>|chat <文本>"}
+        payload = {"ok": False,
+                   "error": "用法: status|scene|tools|actions|run <tool_id>|chat <文本>|"
+                            "act <action> [params_json] [--commit token=...]|write on|off"}
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     # status 是诊断命令：桥没开也算查到了状态，退出码应为 0，否则脚本里
     # `python -m tak.core.bridge status || echo 没开` 这种写法会误判。

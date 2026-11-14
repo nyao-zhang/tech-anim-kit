@@ -50,6 +50,23 @@ def _register_bridge_executor() -> None:
 _register_bridge_executor()
 
 
+# --------------------------------------------------------------------------- #
+# 场景动作（自然语言 / MCP 能真正查改场景的那一层）
+#
+# 这里只注册 handler，不执行任何 Maya 调用；真正的 ``maya.cmds`` 在每个
+# handler 内部延迟导入。因此纯 Python / CI / Web 工作台 import 本包依然安全。
+# --------------------------------------------------------------------------- #
+def _register_scene_actions() -> None:
+    try:
+        from .scene_ops import register_all
+        register_all()
+    except Exception as exc:  # 注册失败不应拖垮整个适配器
+        print("[TAK] Maya 场景动作注册失败: %s: %s" % (type(exc).__name__, exc))
+
+
+_register_scene_actions()
+
+
 __all__ = [
     "MayaAdapter",
     "capture_snapshot",
